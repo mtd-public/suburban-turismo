@@ -16,8 +16,15 @@ export const LIGHTS = {
   autumn: { name: 'Autumn afternoon', sun: 0xffe0b4, si: 1.0, dir: [-0.55, 0.6, 0.5], sky: 0xc4d0e4, ground: 0x6e5c46, hi: 0.55, fog: 0xd6ccba, near: 1, zenith: '#5d82bc', horizon: '#c6cdd6', haze: '#ddd2c0', leaf: 0xf4ece0, cloud: '#ffffff' },
   golden: { name: 'Golden hour', sun: 0xffb46a, si: 1.15, dir: [-0.8, 0.28, 0.3], sky: 0xc8a894, ground: 0x4a3a30, hi: 0.5, fog: 0xe2b48c, near: 0.85, zenith: '#5a6ea6', horizon: '#e4ae84', haze: '#f2c494', leaf: 0xffd6a8, cloud: '#ffe0c0' },
   overcast: { name: 'Overcast (Driver)', sun: 0xdadee2, si: 0.45, dir: [-0.3, 0.8, 0.4], sky: 0xbcc0c8, ground: 0x6c6860, hi: 0.8, fog: 0xb6bac0, near: 0.6, zenith: '#8a929e', horizon: '#b4b8be', haze: '#bcc0c4', leaf: 0xbcbcbc, cloud: '#d8dade' },
-  dusk: { name: 'Dusk, streetlights on', sun: 0x7a80b8, si: 0.3, dir: [0.4, 0.3, -0.6], sky: 0x46507a, ground: 0x1e1c24, hi: 0.5, fog: 0x2e3450, near: 0.55, zenith: '#141c3a', horizon: '#3e4670', haze: '#7a6070', leaf: 0x4a4a64, cloud: '#5a5a7a' },
+  dusk: { name: 'Dusk, streetlights on', sun: 0x7a80b8, si: 0.3, dir: [0.4, 0.3, -0.6], sky: 0x46507a, ground: 0x1e1c24, hi: 0.5, fog: 0x2e3450, near: 0.55, zenith: '#141c3a', horizon: '#3e4670', haze: '#7a6070', leaf: 0x4a4a64, cloud: '#5a5a7a', lamps: true },
+  night: { name: 'Night', sun: 0x6a7aaa, si: 0.14, dir: [0.3, 0.75, -0.4], sky: 0x2a3050, ground: 0x0a0a10, hi: 0.3, fog: 0x0c101c, near: 0.5, zenith: '#04060e', horizon: '#121828', haze: '#1c2032', leaf: 0x2c3044, cloud: '#1e2234', lamps: true, night: true },
 };
+// Winter over any time of day: colder and whiter, the fog closer (it's snowing), the sky a flat grey.
+function wintry(L) {
+  if (L.night) return { ...L, name: `${L.name} (winter)`, fog: 0x161c2a, ground: 0x2a3040, hi: 0.4, near: L.near * 0.75 };
+  if (L.lamps) return { ...L, name: `${L.name} (winter)`, fog: 0x3e4662, ground: 0x4a5070, near: L.near * 0.75, haze: '#6e6a80', cloud: '#7a7a90' };
+  return { ...L, name: `${L.name} (winter)`, sun: 0xe8eef8, si: L.si * 0.85, sky: 0xd4dbe6, ground: 0xb8c0cc, hi: 0.75, fog: 0xd6dce6, near: L.near * 0.72, zenith: '#8e9cb4', horizon: '#cfd5df', haze: '#e2e6ee', leaf: 0xffffff, cloud: '#f2f4f8' };
+}
 
 // The controller numbers for one vehicle (HANDLING.car with the vehicle's overrides and its own body circles).
 export function handlingFor(key) {
@@ -41,12 +48,12 @@ export function createStage(canvas) {
   scene.add(town.group, town.pools);
   const stage = { R, scene, cam, sun, hemi, skyDome, town, light: 'autumn' };
   stage.applyLight = (k) => {
-    stage.light = k; const L = LIGHTS[k];
+    stage.light = k; const L = T.WINTER ? wintry(LIGHTS[k]) : LIGHTS[k];
     sun.color.setHex(L.sun); sun.intensity = L.si; sun.position.set(...L.dir).multiplyScalar(100);
     hemi.color.setHex(L.sky); hemi.groundColor.setHex(L.ground); hemi.intensity = L.hi;
     scene.fog.color.setHex(L.fog); scene.fog.near = PS1.fogNear * L.near; scene.fog.far = PS1.fogFar * L.near;
     skyMat.map = T.sky({ name: k, ...L }); skyMat.needsUpdate = true;
-    town.pools.visible = k === 'dusk';
+    town.pools.visible = !!L.lamps;
     for (const f of FOLIAGE) f.color.setHex(L.leaf);
   };
 

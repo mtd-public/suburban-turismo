@@ -21,15 +21,18 @@ import { Input } from './input.js';
 import { wallAt } from './world.js';
 import { clamp, damp, lerp } from './utils.js';
 import { ROUTES, buildRouteLayer, routeLength, routeSamples } from './routes.js';
+import { Snowfall } from './fx.js';
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
 
 // ------------------------------------------------------------------ renderer, scene, light, town (js/stage.js)
+T.setWinter(params.get('season') === 'winter'); // (?season=winter: the winter tileset, falling snow)
 const canvas = $('#game');
 const stage = createStage(canvas);
 const { R, scene, cam, skyDome, town, W, props, people, dale } = stage;
 const ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 10, 900); // the Routes map: straight down, north up
+const snow = new Snowfall(scene); snow.on = T.WINTER;
 const viewCam = () => (mode === 'map' ? ocam : cam);
 let light = params.get('light') in LIGHTS ? params.get('light') : 'autumn';
 function applyLight(k) {
@@ -177,7 +180,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 function tick(dt) {
-  time += dt; modeT += dt;
+  time += dt; modeT += dt; snow.step(dt, cam);
   for (const k in people) {
     const p = people[k]; posePerson(p, time);
     const w = p.userData.spot.walk;

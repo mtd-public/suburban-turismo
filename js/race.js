@@ -105,20 +105,31 @@ export function cpuControl(r, others, raceT, dt) {
   return { dir: { x: dx / d, z: dz / d, mag: 1 } };
 }
 
-// Car against car: the circles push apart by weight; the one doing the hitting loses some speed.
+// Car against car: the circles push apart by weight; the one doing the hitting loses some speed, and a hard hit
+// knocks the other car sideways and spins it (a PIT on the corner, a T-bone through the door).
+// Returns how hard they met (closing speed, m/s; 0 when they didn't touch).
 export function bump(W, a, b) {
   const A = a.body, Bb = b.body;
-  if (Math.abs(A.x - Bb.x) > 8 || Math.abs(A.z - Bb.z) > 8 || Math.abs(A.y - Bb.y) > 1.5) return false;
-  let hit = false;
+  if (Math.abs(A.x - Bb.x) > 8 || Math.abs(A.z - Bb.z) > 8 || Math.abs(A.y - Bb.y) > 1.5) return 0;
+  let hit = 0;
   for (const [ax, az, ar] of circles(A)) for (const [bx, bz, br] of circles(Bb)) {
     const dx = bx - ax, dz = bz - az, d = Math.hypot(dx, dz), min = ar + br;
     if (d >= min || d < 1e-4) continue;
-    hit = true;
+    hit = Math.max(hit, 0.01);
     const nx = dx / d, nz = dz / d, push = min - d, ma = A.H.MASS || 4, mb = Bb.H.MASS || 4, ka = mb / (ma + mb), kb = ma / (ma + mb);
     const mv = (B, s, k) => { const x = B.x + nx * push * k * s, z = B.z + nz * push * k * s; if (!blockedAt(W, B, x, z)) { B.x = x; B.z = z; } };
     mv(A, -1, ka); mv(Bb, 1, kb);
     const va = A.speed * (Math.sin(A.vh) * nx + Math.cos(A.vh) * nz), vb = Bb.speed * (Math.sin(Bb.vh) * nx + Math.cos(Bb.vh) * nz);
     if (va - vb > 0.5) { A.speed *= 0.96; Bb.speed = Math.min(Bb.speed + (va - vb) * 0.15, Bb.speed * 1.02 + 0.5); a.bumped = b.bumped = 0.3; }
+    const closing = Math.abs(va - vb);
+    if (closing > 5 && !(a.parked && b.parked) && (a.hitCd || 0) <= 0 && (b.hitCd || 0) <= 0) { // the violent part: knock and spin, both ways by weight
+      hit = Math.max(hit, closing); a.hitCd = b.hitCd = 0.35;
+      const ma = A.H.MASS || 4, mb = Bb.H.MASS || 4, side = (bx - Bb.x) * Math.cos(Bb.heading) - (bz - Bb.z) * Math.sin(Bb.heading); // (which side of b was hit)
+      Bb.kx += nx * closing * 0.55 * ma / mb; Bb.kz += nz * closing * 0.55 * ma / mb; A.kx -= nx * closing * 0.25 * mb / ma; A.kz -= nz * closing * 0.25 * mb / ma;
+      if (!b.parked) { Bb.heading += Math.sign(side || 1) * Math.min(0.9, closing * 0.035) * ma / mb; Bb.vh = Bb.heading - Math.sign(side || 1) * 0.3; }
+      if (closing > 12) { Bb.vy = Math.max(Bb.vy, closing * 0.22); Bb.grounded = false; Bb.plat = null; }
+      A.speed *= 0.8;
+    }
   }
   return hit;
 }

@@ -42,7 +42,7 @@ export class Controls {
       this.keys.add(e.code);
       const menu = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Enter: 'ok', Space: 'ok', Escape: 'back', Backspace: 'back' }[e.code];
       if (menu) this.onMenu?.(menu);
-      const act = { KeyC: 'camera', KeyV: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', Space: 'hop', KeyF: 'fire', KeyE: 'fire' }[e.code];
+      const act = { KeyC: 'camera', KeyV: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', Space: 'hop', KeyF: 'fire', KeyE: 'fire', KeyM: 'mute' }[e.code];
       if (act) this.onAction?.(act);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
