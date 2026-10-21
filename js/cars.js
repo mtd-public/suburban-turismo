@@ -5,7 +5,9 @@
 //   * a greenhouse: the cabin profile extruded narrower, pulled in at the top (tumblehome), side glass painted
 //     on its flanks, windscreen / rear glass / roof coloured per face;
 //   * decal planes for the faces that sell it: headlamps, grille, tail-lamps, number plates;
-//   * 10-sided wheels with painted rims (hubcaps, alloys, aero covers) and a blob shadow.
+//   * 14-sided wheels with painted rims (hubcaps, alloys, aero covers) and a blob shadow.
+// Rounding (so they read as 90s cars, not boxes): the profiles are smoothed (Catmull-Rom), every edge gets a
+// rounded bevel, and the body is pinched in plan at the nose and tail, at the shoulders and under the sills.
 // Coordinates: +z is the nose, y up, the ground at 0, the car centred on its wheelbase.
 import * as THREE from 'three';
 import { lam, basic, canvasTex } from './ps1.js';
@@ -39,10 +41,24 @@ function zAt(profile, y, front) {
   return best;
 }
 
+// A polyline through the points, smoothed (centripetal Catmull-Rom) and resampled to n points.
+function smoothLine(pts, n) {
+  const c = new THREE.CatmullRomCurve3(pts.map(([z, y]) => new THREE.Vector3(z, y, 0)), false, 'centripetal');
+  return c.getPoints(n - 1).map((v) => [v.x, v.y]);
+}
+const sstep = (a, b, x) => { const k = Math.max(0, Math.min(1, (x - a) / (b - a))); return k * k * (3 - 2 * k); };
+// How much narrower than full width the body is at (z, y): pinched at the nose and tail (rounded corners in plan),
+// at the shoulders (the crown) and tucked under the sills.
+function taper(S, z, y) {
+  const zc = (S.zF + S.zR) / 2, half = (S.zF - S.zR) / 2, u = Math.abs(z - zc) / half;
+  return (1 - 0.13 * sstep(0.62, 1.02, u) ** 1.5) * (1 - 0.07 * sstep(S.belt - 0.3, S.belt + 0.05, y)) * (1 - 0.06 * sstep(0.42, S.yb, y));
+}
+
 // Extrude a (z, y) profile across x, centred, exactly `width` wide; UVs: caps by (z, y) over the bbox, walls by (x, z).
-function extrudeProfile(profile, width, bevel = 0.05) {
+// The bevel rounds every edge (3 segments) and is offset inward, so the outline (and the wheel arches) stay put.
+function extrudeProfile(profile, width, bevel = 0.05, segs = 3) {
   const shape = new THREE.Shape(profile.map(([z, y]) => new THREE.Vector2(z, y)));
-  const g = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelSegments: 1, curveSegments: 1 });
+  const g = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel * 0.8, bevelOffset: -bevel * 0.8, bevelSegments: segs, curveSegments: 1 });
   g.rotateY(-Math.PI / 2); // shape x → +z (the nose), extrusion → −x
   g.computeBoundingBox();
   const bb = g.boundingBox;
@@ -263,15 +279,19 @@ export function buildVehicle(key, opts = {}) {
   const S0 = VEHICLES[key];
   if (S0.segway) return buildSegway(opts);
   const S = { ...S0, color: opts.color ?? S0.color, livery: opts.livery };
+  S.top = smoothLine(S0.top, 28); S.cabin = [S0.cabin[0], ...smoothLine(S0.cabin.slice(0, -1), 18).slice(1), S0.cabin.at(-1)]; // (the cabin's last point closes it flat on the belt)
   const ck = `${key}${S.color}${S.livery || ''}`;
   const root = new THREE.Group(), body = new THREE.Group();
   root.add(body);
   // lower body
   const [fa, ra] = S.axles;
   const zF = S.top[S.top.length - 1][0], zR = S.top[0][0];
+  S.zF = Math.max(...S.top.map((q) => q[0])); S.zR0 = Math.min(...S.top.map((q) => q[0]));
   const prof = [...S.top, ...underline(zF - 0.05, zR + 0.05, S.yb, [fa, ra], S.archR, S.wheelR)];
   S.zR = Math.min(...prof.map((p) => p[0])); const len = Math.max(...prof.map((p) => p[0])) - S.zR;
-  const lower = extrudeProfile(prof, S.width, 0.06);
+  const lower = extrudeProfile(prof, S.width, 0.1);
+  const pinch = (g) => { const q = g.attributes.position; for (let i = 0; i < q.count; i++) q.setX(i, q.getX(i) * taper(S, q.getZ(i), q.getY(i))); g.computeVertexNormals(); };
+  pinch(lower);
   // baked vertex shading: darker toward the sills (the PS1 had no AO, so artists painted it into the vertices)
   const col = new Float32Array(lower.attributes.position.count * 3);
   for (let i = 0; i < lower.attributes.position.count; i++) { const k = 0.72 + 0.28 * Math.min(1, Math.max(0, (lower.attributes.position.getY(i) - 0.2) / 0.8)); col.set([k, k, k], i * 3); }
@@ -279,9 +299,9 @@ export function buildVehicle(key, opts = {}) {
   const sideT = tc(`side${ck}`, () => bodySideTex(S, prof)), topT = tc(`top${ck}`, () => bodyTopTex(S, len));
   body.add(new THREE.Mesh(lower, [lam(0xffffff, sideT, { vertexColors: true }), lam(0xffffff, topT, { vertexColors: true })]));
   // greenhouse
-  const cab = extrudeProfile(S.cabin, S.width * S.cabinW, 0);
+  const cab = extrudeProfile(S.cabin, S.width * S.cabinW, 0.05, 2);
   const p = cab.attributes.position, yb = Math.min(...S.cabin.map((q) => q[1])), yt = Math.max(...S.cabin.map((q) => q[1]));
-  for (let i = 0; i < p.count; i++) { const t = (p.getY(i) - yb) / (yt - yb); p.setX(i, p.getX(i) * (1 - S.tumble * t)); }
+  for (let i = 0; i < p.count; i++) { const t = Math.max(0, (p.getY(i) - yb) / (yt - yb)); p.setX(i, p.getX(i) * (1 - S.tumble * t) * (1 - 0.06 * t * t) * (1 - 0.1 * sstep(0.55, 1, Math.abs(p.getZ(i) - (S.cabin[0][0] + S.cabin.at(-1)[0]) / 2) / ((S.cabin.at(-1)[0] - S.cabin[0][0]) / 2)))); } // (tumblehome, a rounded roof)
   cab.computeVertexNormals();
   // per-face colour on the walls: roof in body colour, windscreen / rear glass dark with a reflection gradient
   const nrm = cab.attributes.normal, cc = new Float32Array(p.count * 3), body3 = hexA(S.color).map((v) => v / 255);
@@ -303,17 +323,25 @@ export function buildVehicle(key, opts = {}) {
   const zFront = (y) => zAt(prof, y, true) + 0.065, zRear = (y) => zAt(prof, y, false) - 0.065;
   const dmat = (k, f) => lam(0xffffff, tc(k, f));
   const hl = dmat(`head`, () => lampTex('head'));
+  // night: glows on the lamps, a pool of light thrown up the road, tail lamps that brighten when you brake
+  const night = new THREE.Group(); night.visible = false; root.add(night);
+  const glowM = (c, o = 1) => new THREE.SpriteMaterial({ map: tc('glow', glowTex), color: c, transparent: true, opacity: o, blending: THREE.AdditiveBlending, depthWrite: false });
+  const tails = [];
   for (const s of [-1, 1]) {
     const w = F.lampSweep ? 0.46 : 0.36;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w, F.lampH), hl);
-    m.position.set(s * (hw - w / 2 - 0.08), F.lamps, zFront(F.lamps)); body.add(m);
+    const xf = hw * taper(S, zFront(F.lamps) - 0.05, F.lamps);
+    m.position.set(s * (xf - w / 2 - 0.05), F.lamps, zFront(F.lamps) - 0.02); m.rotation.y = s * 0.12; body.add(m);
+    const hg = new THREE.Sprite(glowM(0xfff2d0)); hg.scale.set(1.3, 0.9, 1); hg.position.set(m.position.x, F.lamps, zFront(F.lamps) + 0.12); night.add(hg);
     const t = new THREE.Mesh(new THREE.PlaneGeometry(Rr.lampW, Rr.lampH), dmat('tail', () => lampTex('tail')));
-    t.position.set(s * (hw - Rr.lampW / 2 - 0.06), Rr.lamps, zRear(Rr.lamps)); t.rotation.y = Math.PI; body.add(t);
+    const xr = hw * taper(S, zRear(Rr.lamps) + 0.05, Rr.lamps);
+    t.position.set(s * (xr - Rr.lampW / 2 - 0.04), Rr.lamps, zRear(Rr.lamps) + 0.02); t.rotation.y = Math.PI - s * 0.12; body.add(t);
+    const tg = new THREE.Sprite(glowM(0xff2a1a, 0.55)); tg.scale.set(0.8, 0.55, 1); tg.position.set(t.position.x, Rr.lamps, zRear(Rr.lamps) - 0.1); night.add(tg); tails.push(tg);
   }
-  const gw = F.grilleW ?? (S.width - 1.0);
+  const gw = F.grilleW ?? (S.width * 0.86 - 1.0);
   const gr = new THREE.Mesh(new THREE.PlaneGeometry(gw, F.grilleH), F.grille === 'grilleSlot' ? dmat(`gs${S.color}`, () => lampTex('grilleSlot', shade(S.color, -0.1))) : dmat(F.grille, () => lampTex(F.grille)));
   gr.position.set(0, F.lamps - (F.grilleH > 0.2 ? 0.06 : 0), zFront(F.lamps) + 0.005); body.add(gr);
-  const bump = new THREE.Mesh(new THREE.PlaneGeometry(S.width - 0.2, 0.16), dmat('bdark', () => lampTex('bumperDark')));
+  const bump = new THREE.Mesh(new THREE.PlaneGeometry(S.width * 0.78, 0.16), dmat('bdark', () => lampTex('bumperDark')));
   bump.position.set(0, 0.36, zFront(0.36)); body.add(bump);
   const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.21), lam(0xffffff, tc(`plate${opts.plate ?? S.plate}`, () => plateTex(opts.plate ?? S.plate))));
   plate.position.set(0, Rr.glassStrip ? 0.55 : 0.6, zRear(0.6) - 0.005); plate.rotation.y = Math.PI; body.add(plate);
@@ -321,20 +349,22 @@ export function buildVehicle(key, opts = {}) {
   if (F.ornament) { const o = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.09, 4), lam(0xd8d8d4)); o.position.set(0, 0.9, zFront(0.86) - 0.12); body.add(o); }
   // mirrors
   const mm = lam(S.color, tc('grit', () => grit()));
-  for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.13, 0.1), mm); m.position.set(s * (hw + 0.06), S.belt + 0.08, S.mirrorZ); body.add(m); }
+  for (const s of [-1, 1]) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.13, 0.1), mm); m.position.set(s * (hw * taper(S, S.mirrorZ, S.belt) + 0.06), S.belt + 0.08, S.mirrorZ); body.add(m); }
   if (S.roofRails) for (const s of [-1, 1]) { const r = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.05, 2.2), lam(0x202022)); r.position.set(s * hw * S.cabinW * (1 - S.tumble) * 0.85, 1.84, -1.0); body.add(r); }
   // wheels
   const wheels = [];
   const tireM = lam(0xffffff, tc('tread', treadTex)), rimM = lam(0xffffff, tc(`rim${S.rim}`, () => rimTex(S.rim)));
   for (const za of S.axles) for (const s of [-1, 1]) {
     const pivot = new THREE.Group(); pivot.position.set(s * (hw - 0.14), S.wheelR, za);
-    const wg = new THREE.CylinderGeometry(S.wheelR, S.wheelR, 0.22, 10); wg.rotateZ(Math.PI / 2);
+    const wg = new THREE.CylinderGeometry(S.wheelR, S.wheelR, 0.22, 14); wg.rotateZ(Math.PI / 2);
     const w = new THREE.Mesh(wg, [tireM, rimM, rimM]);
     pivot.add(w); root.add(pivot);
     wheels.push({ pivot, mesh: w, front: za > 0 });
   }
+  const pool = new THREE.Mesh(new THREE.PlaneGeometry(S.width * 2.6, 14), basic(0xfff0c8, tc('beam', beamTex), { transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }));
+  pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.06, zF + 7.2); night.add(pool);
   const sh = blobShadow(S.width + 0.5, len + 0.6); root.add(sh);
-  root.userData = { key, spec: S0, body, wheels, wheelR: S.wheelR };
+  root.userData = { key, spec: S0, body, wheels, wheelR: S.wheelR, night, tails };
   if (S.livery === 'police') { // the light bar: red and blue halves that flash (flashLights), with a glow sprite each
     const ty = Math.max(...S.cabin.map((q) => q[1])), top = S.cabin.filter((q) => q[1] > ty - 0.05), tz = top.reduce((a, q) => a + q[0], 0) / top.length;
     const bar = new THREE.Group(); bar.position.set(0, ty, tz); body.add(bar);
@@ -375,6 +405,13 @@ function buildSegway(opts) {
   return root;
 }
 
+// The headlamp throw on the road: a cone, brightest near the car, fading up the road (additive).
+function beamTex() { return canvasTex(32, 64, (g, w, h) => { for (let y = 0; y < h; y++) { const k = y / h, half = 4 + k * 12, a = Math.pow(1 - k, 1.6) * 0.9; const gr = g.createLinearGradient(16 - half, 0, 16 + half, 0); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.5, `rgba(255,255,255,${a})`); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, y, w, 1); } }, { repeat: false }); } // (row 0 is the end by the bumper)
+// Night lamps on or off; brake lights brighter while braking (k 0..1).
+export function carLights(car, on, brake = 0) {
+  const u = car.userData; if (!u.night) return;
+  u.night.visible = on; if (on) for (const t of u.tails) { t.material.opacity = 0.45 + brake * 0.55; t.scale.set(0.8 + brake * 0.5, 0.55 + brake * 0.3, 1); }
+}
 // A soft round glow for the light bar (additive sprite).
 function glowTex() { return canvasTex(32, 32, (g, w, h) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, { repeat: false }); }
 // Flash a cruiser's light bar: red, blue, red, blue, with a double blip (t: seconds, any clock).

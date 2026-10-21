@@ -7,6 +7,11 @@
 //   Vape cloud      dropped behind you: anyone driving through it can't see, wobbles, and coughs (damage)
 //   Chainsaw        from Home Work (the hardware superstore): bolted to your bumper for 8 s, chews anything you touch
 //   Truck nuts      comically large, dropped right behind you: a mine that goes off under whoever else drives over it
+//   Roman candle    a burst of five fireballs straight ahead, three bursts
+//   Bottle rockets  a swarm of ten little whistlers that home in hard (and wobble)
+//   Mortar cake     the 4th of July finale: five shells lobbed high onto whoever's nearest, bursting in the sky
+//                   on the way down, then on them
+//   Firecracker string  laid across the road behind you: it pops and jolts anyone on it for 3 s
 //   Casserole       the neighbour's: +35 health
 //
 // Every car has a health bar over it (and yours in the HUD).
@@ -27,9 +32,14 @@ export const WEAPONS = {
   vape: { name: 'Vape cloud', icon: '💨', ammo: 2, color: 0xc77dff },
   chainsaw: { name: 'Home Work chainsaw', icon: '🪚', ammo: 1, color: 0xff8a1a },
   nuts: { name: 'Truck nuts', icon: '🔴', ammo: 2, color: 0xe03030 },
+  candle: { name: 'Roman candle', icon: '🕯️', ammo: 3, color: 0xffb020 },
+  bottles: { name: 'Bottle rockets', icon: '🍾', ammo: 2, color: 0x60c0ff },
+  mortar: { name: 'Mortar cake', icon: '🎇', ammo: 1, color: 0xff60d0 },
+  crackers: { name: 'Firecracker string', icon: '🧨', ammo: 2, color: 0xff4020 },
   casserole: { name: 'Casserole', icon: '🥘', ammo: 0, color: 0x3ddc84 }, // (eaten on the spot)
 };
-const KINDS = ['fireworks', 'turkey', 'nuts', 'vape', 'chainsaw', 'casserole', 'fireworks', 'nuts', 'turkey', 'chainsaw', 'vape', 'casserole', 'fireworks', 'nuts'];
+const KINDS = ['fireworks', 'turkey', 'candle', 'nuts', 'bottles', 'vape', 'chainsaw', 'casserole', 'mortar', 'crackers', 'fireworks', 'candle', 'turkey', 'bottles', 'chainsaw', 'casserole', 'nuts', 'mortar'];
+const FW = [0xff4040, 0x40a0ff, 0x40ff80, 0xffe040, 0xff60d0, 0xffffff]; // firework colours
 const SAW_T = 8;
 const RESPAWN = 8, GRAV = 22;
 
@@ -89,7 +99,11 @@ function nutsMesh() {
   g.scale.setScalar(1.7);
   return g;
 }
-const MODELS = { nuts: nutsMesh, fireworks: fireworksMesh, turkey: turkeyMesh, vape: vapeMesh, chainsaw: () => chainsawMesh(), casserole: casseroleMesh };
+function candleMesh() { const g = new THREE.Group(); const t = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.14, 1.6, 6), lam(0xd02a7a)); g.add(t); for (let i = 0; i < 4; i++) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.145, 0.145, 0.08, 6), lam(0xffe040)); b.position.y = -0.6 + i * 0.4; g.add(b); } g.rotation.z = 0.3; return g; }
+function bottlesMesh() { const g = new THREE.Group(); for (let i = 0; i < 5; i++) { const r = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.5, 4), lam(FW[i])); r.position.set((i - 2) * 0.16, 0.2, 0); const st = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.9, 0.02), lam(0xc8a060)); st.position.set((i - 2) * 0.16, -0.4, 0); g.add(r, st); } const bt = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.24, 0.6, 7), basic(0x3a8a4a, null, { transparent: true, opacity: 0.7 })); bt.position.y = -0.5; g.add(bt); return g; }
+function mortarMesh() { const g = new THREE.Group(); const side = T.sign('FINALE', { w: 64, h: 32, bg: '#1a2a8a', fg: '#ff60d0', font: 'bold 15px Arial, sans-serif', grime: 0.1 }); g.add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.6, 0.9), [lam(0xffffff, side), lam(0xffffff, side), lam(0x202020), lam(0x1a2a8a), lam(0xffffff, side), lam(0xffffff, side)])); for (let i = 0; i < 9; i++) { const t = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.06, 6), lam(0x101010)); t.position.set(((i % 3) - 1) * 0.26, 0.32, ((i / 3 | 0) - 1) * 0.26); g.add(t); } return g; }
+function crackersMesh() { const g = new THREE.Group(); for (let i = 0; i < 8; i++) { const c = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.3, 5), lam(0xe02010)); c.rotation.z = Math.PI / 2; c.position.set(0, Math.sin(i * 0.9) * 0.15, (i - 3.5) * 0.14); g.add(c); } const f = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.02, 1.2), lam(0x5a4a30)); g.add(f); g.scale.setScalar(1.4); return g; }
+const MODELS = { candle: candleMesh, bottles: bottlesMesh, mortar: mortarMesh, crackers: crackersMesh, nuts: nutsMesh, fireworks: fireworksMesh, turkey: turkeyMesh, vape: vapeMesh, chainsaw: () => chainsawMesh(), casserole: casseroleMesh };
 
 export function createCombat(scene, W, fx) {
   const glowMap = glow(), smokeMap = T.smoke();
@@ -128,7 +142,7 @@ export function createCombat(scene, W, fx) {
       r.saw = chainsawMesh(true); r.saw.visible = false; r.saw.position.set(0, 0.75, (r.len || 4.6) / 2 + 0.1); r.mesh.add(r.saw);
     }
     // pickups: spread round the track, alternating sides of the line
-    const n = 14;
+    const n = KINDS.length;
     for (let k = 0; k < n; k++) {
       const i = Math.round(((k + 0.5) / n) * track.n), s = track.at(i), side = (k % 2 ? 1 : -1) * 2.2, kind = KINDS[k % KINDS.length];
       const m = MODELS[kind](); const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, color: WEAPONS[kind].color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); halo.scale.setScalar(2.6); m.add(halo);
@@ -171,7 +185,9 @@ export function createCombat(scene, W, fx) {
   // ---- weapons
   C.fire = (r) => {
     if (r.dead || !r.weapon || r.cool > 0 || C.over) return false;
-    const B = r.body, [fxx, fzz] = fwd(B), y = B.y + 1.1;
+    const B = r.body, [fxx, fzz] = fwd(B), y = B.y + 1.1, kind = r.weapon;
+    const glowBall = (color, size) => { const m = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowMap, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); m.scale.setScalar(size); root.add(m); return m; };
+    const nearest = (range) => { let tg = null, bd = range; for (const o of C.racers) { if (o === r || o.dead) continue; const d = Math.hypot(o.body.x - B.x, o.body.z - B.z); if (d < bd) { bd = d; tg = o; } } return tg; };
     if (r.weapon === 'fireworks') {
       for (let k = 0; k < 4; k++) {
         const a = B.heading + (k - 1.5) * 0.07, m = new THREE.Group();
@@ -187,9 +203,31 @@ export function createCombat(scene, W, fx) {
       C.shots.push({ kind: 'turkey', m, owner: r, vx: fxx * v, vz: fzz * v, vy: 8.5, t: 0, life: 4, spin: 6 + Math.random() * 4 });
       r.cool = 0.6;
     } else if (r.weapon === 'nuts') { // dropped straight off the back; armed a moment later
-      const m = nutsMesh(), x = B.x - fxx * ((r.len || 4.6) / 2 + 1.8), z = B.z - fzz * ((r.len || 4.6) / 2 + 1.8), gy = groundAt(W, x, z, B.y + 2).h;
+      const m = nutsMesh(), x = B.x - fxx * ((r.len || 4.6) / 2 + 1.8), z = B.z - fzz * ((r.len || 4.6) / 2 + 1.8), gy = groundAt(W, x, z, Math.max(0, B.y + 2)).h;
       m.position.set(x, gy + 1.5, z); m.rotation.y = B.heading; root.add(m);
       C.shots.push({ kind: 'nuts', m, owner: r, t: 0, life: 25, gy, vy: 0 });
+      r.cool = 0.6;
+    } else if (kind === 'candle') { // five fireballs, one after another
+      for (let k = 0; k < 5; k++) { const c = FW[(k + (Math.random() * 6 | 0)) % 6], m = glowBall(c, 1.3); m.position.set(B.x + fxx * 2.4, y + 0.3, B.z + fzz * 2.4); m.visible = false; C.shots.push({ kind: 'ball', m, owner: r, t: 0, delay: k * 0.13, life: 1.4 + k * 0.13, color: c, vx: fxx * (34 + Math.max(0, B.speed)), vy: 3, vz: fzz * (34 + Math.max(0, B.speed)), h: B.heading }); }
+      r.cool = 0.75;
+    } else if (kind === 'bottles') { // a swarm: they fan out, then home in hard
+      for (let k = 0; k < 10; k++) { const c = FW[k % 6], m = glowBall(c, 0.7); m.position.set(B.x + fxx * 2 + (Math.random() - 0.5), y + Math.random() * 0.5, B.z + fzz * 2 + (Math.random() - 0.5)); C.shots.push({ kind: 'bottle', m, owner: r, t: 0, delay: k * 0.05, life: 2.4, color: c, h: B.heading + (k - 4.5) * 0.12, v: 26 + Math.max(0, B.speed) * 0.6, vy: 2 + Math.random() * 2, wob: Math.random() * 6 }); }
+      r.cool = 0.9;
+    } else if (kind === 'mortar') { // the finale: shells lobbed onto whoever's nearest (or up the road)
+      const tg = nearest(70);
+      for (let k = 0; k < 5; k++) {
+        const m = glowBall(0xffd080, 0.9), T0 = 2.1, vy = GRAV * T0 / 2;
+        const tx = tg ? tg.body.x + Math.sin(tg.body.vh) * tg.body.speed * (T0 + k * 0.3) * 0.8 + (Math.random() - 0.5) * 5 : B.x + fxx * 35 + (Math.random() - 0.5) * 8;
+        const tz = tg ? tg.body.z + Math.cos(tg.body.vh) * tg.body.speed * (T0 + k * 0.3) * 0.8 + (Math.random() - 0.5) * 5 : B.z + fzz * 35 + (Math.random() - 0.5) * 8;
+        m.position.set(B.x, y + 0.6, B.z); m.visible = false;
+        C.shots.push({ kind: 'shell', m, owner: r, t: 0, delay: k * 0.3, life: T0 + 0.6 + k * 0.3, vx: (tx - B.x) / T0, vz: (tz - B.z) / T0, vy, color: FW[k % 6], bloomed: false });
+      }
+      r.cool = 1.6;
+    } else if (kind === 'crackers') { // a string across the road behind you
+      const x0 = B.x - fxx * ((r.len || 4.6) / 2 + 1.5), z0 = B.z - fzz * ((r.len || 4.6) / 2 + 1.5), px = fzz, pz = -fxx, pts = [];
+      const m = new THREE.Group();
+      for (let k = 0; k < 9; k++) { const x = x0 + px * (k - 4) * 0.9, z = z0 + pz * (k - 4) * 0.9, gy = groundAt(W, x, z, Math.max(0, B.y + 2)).h; const c = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, 0.4, 5), lam(0xe02010)); c.rotation.z = Math.PI / 2; c.rotation.y = B.heading; c.position.set(x, gy + 0.1, z); m.add(c); pts.push({ x, z, y: gy + 0.15, c }); }
+      root.add(m); C.shots.push({ kind: 'crackers', m, owner: r, t: 0, life: 3.4, pts, next: 0.2 });
       r.cool = 0.6;
     } else if (r.weapon === 'chainsaw') {
       r.sawT = SAW_T; r.saw.visible = true; r.cool = 0.4;
@@ -199,16 +237,22 @@ export function createCombat(scene, W, fx) {
       for (let k = 0; k < 16; k++) {
         const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeMap, color: tints[k % 4], transparent: true, depthWrite: false, opacity: 0 }));
         const a = Math.random() * 6.28, d = Math.random() * c.r * 0.75; s.userData = { x: x + Math.cos(a) * d, z: z + Math.sin(a) * d, s: 6 + Math.random() * 5, ph: Math.random() * 6 };
-        s.position.set(s.userData.x, groundAt(W, s.userData.x, s.userData.z, B.y + 2).h + 1.6 + Math.random() * 1.5, s.userData.z); root.add(s); c.puffs.push(s);
+        s.position.set(s.userData.x, groundAt(W, s.userData.x, s.userData.z, Math.max(0, B.y + 2)).h + 1.6 + Math.random() * 1.5, s.userData.z); root.add(s); c.puffs.push(s);
       }
       clouds.push(c); burst(x, B.y + 1, z, [0xc77dff, 0x7dffe0], 14, 4, 0.8);
       r.cool = 0.8;
     }
     r.ammo--; if (r.ammo <= 0) { r.weapon = null; r.ammo = 0; }
-    fx.onFire?.(r);
+    fx.onFire?.(r, kind);
     return true;
   };
 
+  // A firework shell's bloom: a sphere of coloured stars that hang and fall slowly (the peony).
+  function bloom(x, y, z, color, n = 46, speed = 10) {
+    const c2 = FW[(Math.random() * 6) | 0];
+    for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, u = Math.random() * 2 - 1, rr = Math.sqrt(1 - u * u), v = speed * (0.85 + Math.random() * 0.3); spark(x, y, z, Math.cos(a) * rr * v, u * v, Math.sin(a) * rr * v, i % 3 ? color : c2, 1.1 + Math.random() * 0.6, 0.7, 3); }
+    fx.crackle?.(x, z);
+  }
   function explode(x, y, z, owner, radius, dmg, push, colors) {
     burst(x, y, z, colors, 60, 13, 1.2);
     for (let i = 0; i < 6; i++) fx.puff(x + (Math.random() - 0.5) * 3, y, z + (Math.random() - 0.5) * 3);
@@ -219,7 +263,7 @@ export function createCombat(scene, W, fx) {
       hurt(r, dmg * (0.4 + 0.6 * k) * (r === owner ? 0.25 : 1), owner, nx * push * k, nz * push * k); // (your own blast: a scratch)
       B.vy = Math.max(B.vy, 5 * k); B.grounded = false;
     }
-    fx.boom?.(x, z);
+    fx.boom?.(x, z, dmg > 30);
   }
 
   // ---- the CPU: drive the circuit until someone's close, then go for them; fire when it's worth it
@@ -237,6 +281,10 @@ export function createCombat(scene, W, fx) {
         else if (r.weapon === 'turkey' && d > 10 && d < 30 && ang < 0.25) C.fire(r);
         else if (r.weapon === 'nuts' && ((d < 16 && ang > 2.3) || r.hold > 5)) C.fire(r);
         else if (r.weapon === 'chainsaw' && d < 22 && ang < 0.5) C.fire(r);
+        else if (r.weapon === 'candle' && d < 40 && ang < 0.3) C.fire(r);
+        else if (r.weapon === 'bottles' && d < 50 && ang < 0.9) C.fire(r);
+        else if (r.weapon === 'mortar' && d > 12 && d < 60) C.fire(r);
+        else if (r.weapon === 'crackers' && ((d < 16 && ang > 2.3) || r.hold > 5)) C.fire(r);
         else if (r.weapon === 'vape' && ((d < 18 && ang > 2.4) || r.hold > 7)) C.fire(r);
         if (!r.weapon) r.hold = 0;
       }
@@ -261,11 +309,11 @@ export function createCombat(scene, W, fx) {
       }
       // the chainsaw: anyone in front of the bumper gets chewed
       if (r.sawT > 0) {
-        r.sawT -= dt; if (r.sawT <= 0) r.saw.visible = false;
+        r.sawT -= dt; if (r.sawT <= 0) r.saw.visible = false; r.sawBite = false;
         const B = r.body, [a, b] = fwd(B), L = (r.len || 4.6) / 2 + 1.4, px = B.x + a * L, pz = B.z + b * L;
         for (const o of C.racers) {
           if (o === r || o.dead) continue; const OB = o.body;
-          if (Math.hypot(OB.x - px, OB.z - pz) < 2.4 && Math.abs(OB.y - B.y) < 1.5) { hurt(o, 30 * dt, r, a * 4 * dt, b * 4 * dt); OB.speed *= 1 - 1.5 * dt; if (Math.random() < 0.7) spark(px, B.y + 0.8, pz, (Math.random() - 0.5) * 8, 3 + Math.random() * 3, (Math.random() - 0.5) * 8, Math.random() < 0.5 ? 0xffe080 : 0xffffff, 0.35, 0.35); }
+          if (Math.hypot(OB.x - px, OB.z - pz) < 2.4 && Math.abs(OB.y - B.y) < 1.5) { r.sawBite = true; hurt(o, 30 * dt, r, a * 4 * dt, b * 4 * dt); OB.speed *= 1 - 1.5 * dt; if (Math.random() < 0.7) spark(px, B.y + 0.8, pz, (Math.random() - 0.5) * 8, 3 + Math.random() * 3, (Math.random() - 0.5) * 8, Math.random() < 0.5 ? 0xffe080 : 0xffffff, 0.35, 0.35); }
         }
       }
       // vape clouds
@@ -295,17 +343,49 @@ export function createCombat(scene, W, fx) {
         if (tg) s.h += clamp(wrapAngle(Math.atan2(tg.body.x - s.m.position.x, tg.body.z - s.m.position.z) - s.h), -2 * dt, 2 * dt);
         const p = s.m.position; p.x += Math.sin(s.h) * s.v * dt; p.z += Math.cos(s.h) * s.v * dt; p.y += s.vy * dt; s.vy -= 1.5 * dt;
         s.m.rotation.y = s.h; spark(p.x, p.y, p.z, (Math.random() - 0.5) * 2, 1, (Math.random() - 0.5) * 2, Math.random() < 0.5 ? 0xffc040 : s.color, 0.35, 0.45, 2);
-        const g = groundAt(W, p.x, p.z, p.y + 0.5);
+        const g = groundAt(W, p.x, p.z, Math.max(0, p.y + 0.5));
         if (p.y < g.h + 0.1 || fx.wall(p.x, p.z, p.y)) done = true, hitAt = p;
         for (const r of C.racers) if (r !== s.owner && !r.dead && Math.hypot(r.body.x - p.x, r.body.z - p.z) < 2.1 && Math.abs(r.body.y + 0.8 - p.y) < 1.8) { hurt(r, 9, s.owner, Math.sin(s.h) * 5, Math.cos(s.h) * 5); r.body.speed *= 0.85; done = true; hitAt = p; break; }
         if (done) burst(p.x, p.y, p.z, [s.color, 0xffffff, 0xffe040], hitAt ? 26 : 8, 8, 0.6);
       } else if (s.kind === 'turkey') {
         const p = s.m.position; s.vy -= GRAV * dt; p.x += s.vx * dt; p.y += s.vy * dt; p.z += s.vz * dt; s.m.rotation.x += s.spin * dt; s.m.rotation.y += dt * 2;
         if (Math.random() < 0.5) spark(p.x, p.y, p.z, 0, 0.5, 0, 0xcfeeff, 0.4, 0.4, 0);
-        const g = groundAt(W, p.x, p.z, p.y + 0.5);
+        const g = groundAt(W, p.x, p.z, Math.max(0, p.y + 0.5));
         let hit = p.y < g.h + 0.3 || (s.t > 0.15 && fx.wall(p.x, p.z, p.y));
         for (const r of C.racers) if (r !== s.owner && !r.dead && Math.hypot(r.body.x - p.x, r.body.z - p.z) < 2.3 && Math.abs(r.body.y + 0.8 - p.y) < 1.8) hit = true;
         if (hit || done) { explode(p.x, Math.max(p.y, g.h + 0.5), p.z, s.owner, 9, 48, 16, [0xffa020, 0xcfeeff, 0xffffff, 0xff5020]); for (let k = 0; k < 18; k++) spark(p.x, p.y + 0.5, p.z, (Math.random() - 0.5) * 14, 4 + Math.random() * 6, (Math.random() - 0.5) * 14, 0xe0f6ff, 1, 0.5); done = true; }
+      }
+      else if (s.kind === 'ball') { // a Roman candle fireball: straight, a little drop, a trail
+        if (s.t < s.delay) continue; s.m.visible = true;
+        const p = s.m.position; s.vy -= 4 * dt; p.x += s.vx * dt; p.y += s.vy * dt; p.z += s.vz * dt;
+        if (Math.random() < 0.8) spark(p.x, p.y, p.z, (Math.random() - 0.5), 0.5, (Math.random() - 0.5), s.color, 0.3, 0.6, 1);
+        const g = groundAt(W, p.x, p.z, Math.max(0, p.y + 0.5));
+        if (p.y < g.h + 0.2 || fx.wall(p.x, p.z, p.y)) done = true;
+        for (const r of C.racers) if (r !== s.owner && !r.dead && Math.hypot(r.body.x - p.x, r.body.z - p.z) < 2.0 && Math.abs(r.body.y + 0.8 - p.y) < 1.8) { hurt(r, 7, s.owner, s.vx * 0.12, s.vz * 0.12); done = true; break; }
+        if (done) { burst(p.x, p.y, p.z, [s.color, 0xffffff], 18, 6, 0.6); fx.pop?.(p.x, p.z); }
+      } else if (s.kind === 'bottle') { // bottle rockets: fan out, then home in hard, wobbling, whistling
+        if (s.t < s.delay) { s.m.visible = false; continue; } s.m.visible = true;
+        let tg = null, bd = 60; for (const r of C.racers) { if (r === s.owner || r.dead) continue; const d = Math.hypot(r.body.x - s.m.position.x, r.body.z - s.m.position.z); if (d < bd) { bd = d; tg = r; } }
+        if (tg && s.t > 0.25) s.h += clamp(wrapAngle(Math.atan2(tg.body.x - s.m.position.x, tg.body.z - s.m.position.z) - s.h), -5 * dt, 5 * dt);
+        s.h += Math.sin(s.t * 14 + s.wob) * 2.2 * dt;
+        const p = s.m.position; p.x += Math.sin(s.h) * s.v * dt; p.z += Math.cos(s.h) * s.v * dt; p.y += s.vy * dt; s.vy = Math.max(-1, s.vy - 3 * dt); if (tg) p.y += clamp(tg.body.y + 1 - p.y, -2, 2) * dt;
+        spark(p.x, p.y, p.z, 0, 0.3, 0, s.color, 0.25, 0.35, 0);
+        const g = groundAt(W, p.x, p.z, Math.max(0, p.y + 0.5));
+        if (p.y < g.h + 0.1 || fx.wall(p.x, p.z, p.y)) done = true;
+        for (const r of C.racers) if (r !== s.owner && !r.dead && Math.hypot(r.body.x - p.x, r.body.z - p.z) < 1.9 && Math.abs(r.body.y + 0.8 - p.y) < 1.8) { hurt(r, 4, s.owner, Math.sin(s.h) * 2, Math.cos(s.h) * 2); done = true; break; }
+        if (done) { burst(p.x, p.y, p.z, [s.color, 0xffffff], 10, 5, 0.45); fx.pop?.(p.x, p.z); }
+      } else if (s.kind === 'shell') { // a mortar shell: up high, a bloom in the sky on the way down, then the bang on the ground
+        if (s.t < s.delay) continue; s.m.visible = true;
+        const p = s.m.position; s.vy -= GRAV * dt; p.x += s.vx * dt; p.y += s.vy * dt; p.z += s.vz * dt;
+        spark(p.x, p.y, p.z, 0, -0.5, 0, 0xffd080, 0.4, 0.45, 0);
+        if (!s.bloomed && s.vy < -4) { s.bloomed = true; bloom(p.x, p.y, p.z, s.color); }
+        const g = groundAt(W, p.x, p.z, Math.max(0, p.y + 0.5));
+        if (s.vy < 0 && p.y < g.h + 0.4) { explode(p.x, g.h + 0.5, p.z, s.owner, 6, 20, 9, [s.color, 0xffffff, 0xffa020]); done = true; }
+      } else if (s.kind === 'crackers') { // pops along the string; anyone on it gets jolted and singed
+        s.next -= dt;
+        if (s.next <= 0) { s.next = 0.05 + Math.random() * 0.1; const q = s.pts[(Math.random() * s.pts.length) | 0]; burst(q.x, q.y + 0.2, q.z, [0xffe080, 0xff4020, 0xffffff], 8, 5, 0.4); if (Math.random() < 0.5) fx.pop?.(q.x, q.z); }
+        for (const r of C.racers) { if (r.dead || r === s.owner) continue; for (const q of s.pts) if (Math.hypot(r.body.x - q.x, r.body.z - q.z) < 1.7) { hurt(r, 14 * dt, s.owner); r.body.heading += (Math.random() - 0.5) * 2.5 * dt; r.body.speed *= 1 - 0.8 * dt; if (r.body.grounded && Math.random() < dt * 3) { r.body.vy = 2.5; r.body.grounded = false; } break; } }
+        if (done) for (const q of s.pts) burst(q.x, q.y, q.z, [0x404040], 4, 2, 0.4);
       }
       else if (s.kind === 'nuts') {
         const p = s.m.position; if (p.y > s.gy + 1.0) { s.vy -= GRAV * dt; p.y = Math.max(s.gy + 1.0, p.y + s.vy * dt); if (p.y === s.gy + 1.0) s.vy = 0; } // (a thud onto the road)

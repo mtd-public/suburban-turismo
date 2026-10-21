@@ -9,7 +9,95 @@ import { canvasTex } from './ps1.js';
 import { mulberry32 } from './utils.js';
 
 const memo = new Map();
-const once = (key, make) => { if (!memo.has(key)) memo.set(key, make()); return memo.get(key); };
+const once = (key, make) => { if (!memo.has(key)) { const t = make(); winterize(key, t); memo.set(key, t); } return memo.get(key); };
+
+// ---------------------------------------------------------------- winter
+// The winter tileset: set before the town is built (the game reloads to change season). Each autumn texture is
+// painted as usual, then a winter painter (by key) snows over it: lawns become snowfields with the odd blade
+// poking through, roads go to grey slush with salt and tyre tracks, roofs and hedges get a cap, trees go bare
+// (or stay evergreen under a dusting), leaf litter turns to drifts, the pond freezes, the treeline goes white.
+export let WINTER = false;
+export const setWinter = (on) => { WINTER = !!on; };
+const SNOW = [232, 236, 244], SNOW_SH = [178, 190, 212];
+function snowOver(g, w, h, amt, seed, keepAlpha = true) { // white drifts over what's there (amt 0..1 coverage)
+  const rnd = mulberry32(seed), d = g.getImageData(0, 0, w, h), p = d.data;
+  const cells = []; for (let i = 0; i < 10 + amt * 30; i++) cells.push([rnd() * w, rnd() * h, 3 + rnd() * w * 0.25]);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let f = 0; for (const [cx, cy, r] of cells) { const dx = Math.min(Math.abs(x - cx), w - Math.abs(x - cx)), dy = Math.min(Math.abs(y - cy), h - Math.abs(y - cy)); f = Math.max(f, 1 - Math.hypot(dx, dy) / r); }
+    const k = Math.min(1, f * 2.2 * amt + amt * 0.45 + (rnd() - 0.5) * 0.25), i = (y * w + x) * 4;
+    if (k < 0.35 || (keepAlpha && p[i + 3] < 128)) continue;
+    const c = mix(SNOW_SH, SNOW, Math.min(1, (k - 0.35) * 1.6)), n = (rnd() - 0.5) * 14;
+    p[i] = c[0] + n; p[i + 1] = c[1] + n; p[i + 2] = c[2] + n;
+  }
+  g.putImageData(d, 0, 0);
+}
+const WINTER_FX = {
+  grass: (g, w, h) => { // a snowfield: blue-shaded drifts, sparkle, a few dead blades through it
+    g.fillStyle = css(SNOW); g.fillRect(0, 0, w, h); grain(g, w, h, 10, 0.25, 501);
+    const rnd = mulberry32(502);
+    for (let i = 0; i < 9; i++) { const gr = g.createRadialGradient(rnd() * w, rnd() * h, 1, rnd() * w, rnd() * h, 14); gr.addColorStop(0, css(SNOW_SH, 0.5)); gr.addColorStop(1, css(SNOW_SH, 0)); g.fillStyle = gr; g.fillRect(0, 0, w, h); }
+    for (let i = 0; i < 46; i++) { g.fillStyle = css(rnd() < 0.5 ? [96, 92, 60] : [70, 76, 50], 0.8); g.fillRect(rnd() * w | 0, rnd() * h | 0, 1, 2); }
+    for (let i = 0; i < 30; i++) { g.fillStyle = '#ffffff'; g.fillRect(rnd() * w | 0, rnd() * h | 0, 1, 1); }
+  },
+  asphalt: (g, w, h) => { // wet, darker, salt-whitened, slush in the joints, two tyre tracks of packed snow
+    g.fillStyle = 'rgba(20,24,32,0.25)'; g.fillRect(0, 0, w, h);
+    const rnd = mulberry32(511);
+    for (let i = 0; i < 70; i++) { g.fillStyle = css([210, 214, 222], 0.35 + rnd() * 0.4); g.fillRect(rnd() * w | 0, rnd() * h | 0, 1 + (rnd() * 2 | 0), 1); }
+    for (let i = 0; i < 6; i++) { g.fillStyle = css(mix(SNOW_SH, [120, 124, 130], 0.4), 0.55); g.beginPath(); g.ellipse(rnd() * w, rnd() * h, 3 + rnd() * 6, 2 + rnd() * 3, rnd() * 3, 0, 7); g.fill(); }
+  },
+  concrete: (g, w, h) => snowOver(g, w, h, 0.55, 521),
+  dirt: (g, w, h) => snowOver(g, w, h, 0.7, 531),
+  mulch: (g, w, h) => snowOver(g, w, h, 0.85, 532),
+  water: (g, w, h) => { // a frozen pond: pale ice, cracks, snow at the edges
+    g.fillStyle = css([170, 196, 210]); g.fillRect(0, 0, w, h); grain(g, w, h, 10, 0.2, 541);
+    const rnd = mulberry32(542); g.strokeStyle = 'rgba(240,250,255,0.7)'; g.lineWidth = 1;
+    for (let i = 0; i < 7; i++) { g.beginPath(); let x = rnd() * w, y = rnd() * h; g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (rnd() - 0.5) * 16; y += (rnd() - 0.5) * 16; g.lineTo(x, y); } g.stroke(); }
+    snowOver(g, w, h, 0.25, 543);
+  },
+  shingle: (g, w, h) => snowOver(g, w, h, 0.9, 551),
+  metalroof: (g, w, h) => snowOver(g, w, h, 0.85, 552),
+  hedge: (g, w, h) => snowOver(g, w, h, 0.5, 561),
+  fence: (g, w, h) => { const rnd = mulberry32(565); for (let x = 0; x < w; x += 4) { g.fillStyle = css(SNOW); g.fillRect(x, 0, 3, 1 + (rnd() * 2 | 0)); } }, // (snow on each picket top)
+  fol: (g, w, h, key) => { // bare: branches and snow along them; one tree in three is an evergreen under a dusting
+    const seed = +key.split('|')[1] || 1, rnd = mulberry32(seed * 571);
+    if (seed % 3 === 0) {
+      g.clearRect(0, 0, w, h);
+      for (let row = 0; row < 7; row++) { const y = 6 + row * 7.5, half = 4 + row * 3.6; g.fillStyle = css(mix([36, 62, 44], [20, 36, 26], rnd() * 0.5)); g.beginPath(); g.moveTo(32, y - 6); g.lineTo(32 - half, y + 6); g.lineTo(32 + half, y + 6); g.fill(); g.fillStyle = css(SNOW); g.beginPath(); g.moveTo(32, y - 6); g.lineTo(32 - half * 0.75, y + 3); g.lineTo(32 + half * 0.5, y + 1); g.fill(); }
+      g.fillStyle = css([60, 44, 32]); g.fillRect(31, 58, 3, 6);
+    } else {
+      g.clearRect(0, 0, w, h);
+      const branch = (x, y, a, len, wdt, depth) => {
+        const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+        g.strokeStyle = css([62, 52, 44]); g.lineWidth = wdt; g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
+        if (wdt > 1.2) { g.strokeStyle = css(SNOW); g.lineWidth = Math.max(1, wdt * 0.5); g.beginPath(); g.moveTo(x, y - wdt * 0.5); g.lineTo(x2, y2 - wdt * 0.5); g.stroke(); }
+        if (depth > 0) for (let k = 0; k < 2 + (rnd() < 0.4); k++) branch(x2, y2, a + (rnd() - 0.5) * 1.3, len * (0.62 + rnd() * 0.15), wdt * 0.65, depth - 1);
+      };
+      branch(32, 64, -Math.PI / 2, 18, 4, 4);
+    }
+    const d = g.getImageData(0, 0, w, h); for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 100 ? 255 : 0; g.putImageData(d, 0, 0);
+  },
+  leaves: (g, w, h, key) => { // the leaf-litter decal becomes drifted snow and slush
+    g.clearRect(0, 0, w, h); const rnd = mulberry32(581 + key.length);
+    for (let i = 0; i < 26; i++) { g.fillStyle = css(mix(SNOW, SNOW_SH, rnd() * 0.6)); g.beginPath(); g.ellipse(rnd() * w, rnd() * h, 2 + rnd() * 7, 1 + rnd() * 4, rnd() * 3, 0, 7); g.fill(); }
+    const d = g.getImageData(0, 0, w, h); for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 100 ? 255 : 0; g.putImageData(d, 0, 0);
+  },
+  leafpile: (g, w, h) => { g.fillStyle = css(SNOW); g.fillRect(0, 0, w, h); grain(g, w, h, 12, 0.3, 591); snowOver(g, w, h, 0.2, 592); },
+  treeline: (g, w, h) => { // a far bare wood, white and grey, alpha-cut along the top
+    g.clearRect(0, 0, w, h); const rnd = mulberry32(601);
+    for (let pass = 0; pass < 2; pass++) for (let i = 0; i < 260; i++) {
+      const x = rnd() * w, r = 3 + rnd() * 5, top = h - (pass ? 14 : 22) - Math.sin(x * 0.03) * 4 - rnd() * 8;
+      g.fillStyle = css(mix(rnd() < 0.3 ? [70, 84, 80] : [150, 150, 156], [214, 218, 228], pass ? 0.35 : 0.6));
+      for (const dx of [0, w, -w]) { g.beginPath(); g.arc(x + dx, top + r, r, 0, 7); g.fill(); g.fillRect(x + dx - r, top + r, r * 2, h); }
+    }
+    g.fillStyle = css([200, 202, 210]); g.fillRect(301, 16, 3, 30); g.beginPath(); g.ellipse(302, 13, 8, 5, 0, 0, 7); g.fill();
+    const d = g.getImageData(0, 0, w, h); for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 128 ? 255 : 0; g.putImageData(d, 0, 0);
+  },
+};
+function winterize(key, t) {
+  if (!WINTER || !t?.image?.getContext) return;
+  const k = Object.keys(WINTER_FX).find((p) => key.startsWith(p)); if (!k) return;
+  const c = t.image, g = c.getContext('2d'); WINTER_FX[k](g, c.width, c.height, key); t.needsUpdate = true;
+}
 
 const hex = (c) => [(c >> 16) & 255, (c >> 8) & 255, c & 255];
 const css = ([r, g, b], a = 1) => `rgba(${r | 0},${g | 0},${b | 0},${a})`;
@@ -246,7 +334,7 @@ export const menuBoard = () => once('menu', () => canvasTex(64, 48, (g, w, h) =>
 
 // ---------------------------------------------------------------- nature
 // Tree crown billboard: clusters of leafy blobs with hard alpha edges (the Driver / GT "cross-quad" tree).
-export const foliage = (base = [70, 96, 46], seed = 1) => once(`fol${base}${seed}`, () => canvasTex(64, 64, (g, w, h) => {
+export const foliage = (base = [70, 96, 46], seed = 1) => once(`fol${base}|${seed}`, () => canvasTex(64, 64, (g, w, h) => {
   const rnd = mulberry32(seed * 977);
   for (let i = 0; i < 46; i++) {
     const a = rnd() * Math.PI * 2, r = Math.sqrt(rnd()) * 22, x = 32 + Math.cos(a) * r, y = 30 + Math.sin(a) * r * 0.9, s = 5 + rnd() * 6;
