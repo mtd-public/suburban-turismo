@@ -4,7 +4,8 @@
 //
 //   Race        3 laps, six cars, a rolling grid behind the line, positions live, results at the flag
 //   Time trial  3 laps alone against a ghost: the pro's run first; once you've beaten it, your own best
-//   Cameras     chase or bumper (C / pad Y / the camera button); backing up pops a rear-view mirror
+//   Motor Murder  the death match: six cars on a circuit, weapon pickups (js/combat.js), last car running wins
+//   Cameras     chase or bumper (C / pad RB, or Y outside Motor Murder / the camera button); backing up pops a rear-view mirror
 //
 // The world (renderer, town, props, light) is js/stage.js, shared with the art test (viewer.html).
 import * as THREE from 'three';
@@ -19,6 +20,7 @@ import { driveStep } from './drive.js';
 import { wallAt, platsNear, contains } from './world.js';
 import { DT } from './tuning.js';
 import { Controls } from './controls.js';
+import { createCombat, WEAPONS, COMBAT_TIME } from './combat.js';
 import { clamp, damp } from './utils.js';
 
 const $ = (s) => document.querySelector(s);
@@ -46,6 +48,14 @@ let puffI = 0;
 const puff = (x, y, z) => { const s = puffs[puffI++ % puffs.length]; s.position.set(x, y, z); s.visible = true; s.userData.t = 0; s.userData.v = 0.6 + Math.random() * 0.6; };
 const tickPuffs = (dt) => { for (const s of puffs) if (s.visible) { const u = s.userData; u.t += dt; const k = u.t / 1.1; if (k >= 1) { s.visible = false; continue; } s.scale.setScalar(0.8 + k * 3); s.position.y += u.v * dt; s.material.opacity = 0.65 * (1 - k); } };
 
+// Motor Murder: the weapons, pickups and health live in js/combat.js
+const combat = createCombat(scene, W, {
+  puff, shake: (k) => { G.shake = Math.max(G.shake || 0, k); },
+  wall: (x, z, y) => !!wallAt(W, x, z, y - 0.4, 0.05, 0.3, 0.8),
+  onPickup: (r, kind) => { if (r === G.player) msg(kind === 'casserole' ? '+35 HEALTH' : `${WEAPONS[kind].icon} ${WEAPONS[kind].name}`, 1.2, kind === 'casserole' ? 'good' : 'final'); },
+  onWreck: (r) => { if (r === G.player) msg('WRECKED!', 3, 'bad'); else if (r.lastHit === G.player) msg(`TOTALLED ${r.name}!`, 1.6, 'final'); },
+});
+
 // ------------------------------------------------------------------ the field: who you race
 const RIVALS = [
   { who: 'karen', car: 'minivan', color: 0x2a3a5a }, { who: 'mrJones', car: 'luxury', color: 0x1b1c22 }, { who: 'brenda', car: 'minivan', color: 0xa6987e },
@@ -68,6 +78,7 @@ const G = {
 const ghostPose = { x: 0, y: 0, z: 0, heading: 0 };
 
 function clearRace() {
+  combat.clear();
   for (const m of G.meshes) scene.remove(m);
   if (G.ghostMesh) scene.remove(G.ghostMesh);
   G.meshes = []; G.ghostMesh = null; G.racers = []; G.blocks = []; G.player = null;
@@ -88,7 +99,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
   const track = G.track = new Track(G.route);
   trackLayers[ROUTES.indexOf(G.route)].visible = true;
   const H = handlingFor(carKey), seg = VEHICLES[carKey].segway;
-  const mk = (r, key, color, livery) => { const m = buildVehicle(key, { ...(color != null ? { color } : {}), livery }); scene.add(m); G.meshes.push(m); r.mesh = m; r.key = key; G.racers.push(r); return r; };
+  const mk = (r, key, color, livery) => { const m = buildVehicle(key, { ...(color != null ? { color } : {}), livery }); scene.add(m); G.meshes.push(m); r.mesh = m; r.key = key; r.len = VEHICLES[key].len; r.tall = VEHICLES[key].segway ? 2.3 : 1.9; G.racers.push(r); return r; };
   if (mode === 'race' && G.route.final) { // the last run: you on pole, seven cruisers behind, roadblocks ahead
     G.player = mk(new Racer(track, W, H, 0, { name: 'You' }), carKey);
     const cop = seg ? 'segway' : 'sedan', h = handlingFor(cop);
@@ -99,6 +110,17 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
       r.body.H = { ...r.body.H, MASS: 6 };
       const m = buildVehicle('sedan', { color: 0x141418, livery: 'police' }); scene.add(m); G.meshes.push(m); r.mesh = m; r.key = 'sedan'; G.blocks.push(r);
     }
+  } else if (mode === 'combat') { // spread round the circuit, a sixth of a lap apart
+    track.laps = Infinity;
+    const field = RIVALS.slice().sort(() => Math.random() - 0.5).slice(0, 5);
+    for (let k = 0; k < 6; k++) {
+      const f = k ? field[k - 1] : null, key = k ? (seg ? 'segway' : f.car) : carKey, h = k ? handlingFor(key) : H;
+      const r = mk(new Racer(track, W, h, 0, k ? { cpu: true, name: rivalName(f.who), skill: (H.CRUISE / h.CRUISE) * 0.92, lane: (Math.random() - 0.5) * 2 } : { name: 'You' }), key, k && !seg ? f.color : null);
+      const i = Math.round((k / 6) * track.n), s = track.at(i);
+      Object.assign(r.body, { x: s.x, z: s.z, heading: Math.atan2(s.tx, s.tz), vh: Math.atan2(s.tx, s.tz) }); r.body.y = groundAt0(s.x, s.z); r.idx = i; r.c = 1;
+      if (!k) G.player = r;
+    }
+    combat.start(track, G.racers, G.player);
   } else if (mode === 'race') {
     const field = RIVALS.slice().sort(() => Math.random() - 0.5).slice(0, 5), playerSlot = 3;
     let k = 0;
@@ -118,6 +140,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
   }
   G.player.H0 = G.player.body.H; G.drift = false;
   for (const r of [...G.racers, ...G.blocks]) { r.onLap = onLap; r.onFinish = onFinish; r.mesh.position.set(r.body.x, r.body.y, r.body.z); r.mesh.rotation.y = r.body.heading; }
+  G.combatDone = false; G.haze = 0; document.body.classList.toggle('combat', mode === 'combat');
   G.t = 0; G.count = 3.6; G.acc = 0; G.state = 'countdown'; G.endT = 0; G.results = null; G.splits = [];
   camState.init = false;
   showMenu(null); setHud(true);
@@ -143,7 +166,7 @@ function onLap(r) {
     const mine = r.laps.reduce((a, b) => a + b, 0), theirs = G.ghost.laps.slice(0, n).reduce((a, b) => a + b, 0);
     G.splits.push(mine - theirs); msg(`${fmtD(mine - theirs)}`, 2.2, mine < theirs ? 'good' : 'bad');
   }
-  if (n === G.track.laps - 1) setTimeout(() => G.state === 'race' && msg('FINAL LAP', 2), G.mode === 'tt' ? 1500 : 0);
+  if (n === G.track.laps - 1) setTimeout(() => G.state === 'race' && msg('FINAL LAP', 2, 'final'), G.mode === 'tt' ? 1500 : 0);
 }
 function onFinish(r) {
   if (r !== G.player) return;
@@ -154,8 +177,8 @@ function onFinish(r) {
     G.newBest = !best || run.t < best.t;
     if (G.newBest) store.set(`best:${G.route.key}:${G.car}`, run);
     G.beatPro = run.t < G.pro.t;
-    msg(G.newBest ? 'NEW BEST!' : 'FINISH', 3);
-  } else msg(G.route.final ? (standings().indexOf(r) === 0 ? 'MADE IT!' : 'BUSTED!') : `${ordinal(standings().indexOf(r) + 1)}!`, 3);
+    msg(G.newBest ? 'NEW BEST!' : 'FINISH', 3, G.newBest ? 'final' : '');
+  } else msg(G.route.final ? (standings().indexOf(r) === 0 ? 'MADE IT!' : 'BUSTED!') : `${ordinal(standings().indexOf(r) + 1)}!`, 3, G.route.final ? (standings().indexOf(r) === 0 ? 'good' : 'bad') : standings().indexOf(r) === 0 ? 'final' : '');
 }
 const standings = () => G.racers.slice().sort((a, b) => (a.finished && b.finished ? a.finishT - b.finishT : a.finished ? -1 : b.finished ? 1 : b.prog - a.prog));
 
@@ -176,12 +199,13 @@ function tick(dt) {
   if (G.state === 'countdown') {
     const before = Math.ceil(G.count); G.count -= dt; const now = Math.ceil(G.count);
     if (now !== before && now >= 1 && now <= 3) msg(String(now), 0.9);
-    if (G.count <= 0) { G.state = 'race'; msg(G.route.final && G.mode === 'race' ? 'LOSE THE COPS!' : 'GO!', 1.4); }
+    if (G.count <= 0) { G.state = 'race'; msg(G.mode === 'combat' ? 'MURDER!' : G.route.final && G.mode === 'race' ? 'LOSE THE COPS!' : 'GO!', 1.4, G.mode === 'combat' ? 'bad' : 'good'); }
   }
   if (G.state === 'race') raceStep(dt, inp);
   if (G.state === 'race' || G.state === 'countdown' || G.state === 'results') for (const r of [...G.racers, ...G.blocks]) { r.mesh.position.set(r.body.x, r.body.y, r.body.z); r.mesh.rotation.y = r.body.heading; poseVehicle(r.mesh, r.body, dt); flashLights(r.mesh, time + r.body.x * 0.01); }
   if (G.ghostMesh) { const on = G.state !== 'menu' && ghostAt(G.ghost, G.state === 'countdown' ? 0 : G.t, ghostPose); G.ghostMesh.visible = on; if (on) { G.ghostMesh.position.set(ghostPose.x, ghostPose.y, ghostPose.z); G.ghostMesh.rotation.y = ghostPose.heading; } }
   props.step(dt);
+  combat.frame(dt, time);
   tickPuffs(dt);
   if (G.msgT > 0 && (G.msgT -= dt) <= 0) $('#msg').classList.remove('on');
   if (G.state === 'results' || (G.state === 'race' && G.endT > 0)) { if (G.endT > 0 && (G.endT -= dt) <= 0) showResults(); }
@@ -196,7 +220,9 @@ function raceStep(dt, inp) {
   for (const r of G.racers) props.collide(r.body, dt);
   for (const r of G.blocks) props.collide(r.body, dt);
   let ctlP;
-  if (P.finished || G.auto) ctlP = cpuControl(P, G.racers, G.t, dt);
+  if (G.mode === 'combat' && (P.dead || combat.over)) ctlP = { throttle: 0 };
+  else if (G.auto && G.mode === 'combat') ctlP = combat.cpu(P, dt);
+  else if (P.finished || G.auto) ctlP = cpuControl(P, G.racers, G.t, dt);
   else {
     // brake + steer at speed is a drift: the back steps out (low grip, quicker yaw) and you keep most of your
     // speed; brake alone slows you, then reverses
@@ -212,22 +238,30 @@ function raceStep(dt, inp) {
     G.acc -= DT; G.t += DT;
     for (const r of G.racers) {
       const ev = r.ev; ev.length = 0;
-      const ctl = r === P ? ctlP : r.chase ? copControl(r, P) : cpuControl(r, G.racers, G.t, DT);
+      const ctl = r.dead ? { throttle: 0 } : r === P ? ctlP : r.chase ? copControl(r, P) : G.mode === 'combat' ? combat.cpu(r, DT) : cpuControl(r, G.racers, G.t, DT);
       driveStep(W, r.body, ctl, DT, ev);
       r.progress(G.t);
       for (const e of ev) if (e.type === 'crash') {
         const B = r.body, fx = Math.sin(B.heading), fz = Math.cos(B.heading), L = VEHICLES[r.key].len / 2 + 0.6, hit = wallAt(W, B.x + fx * L, B.z + fz * L, B.y, 0.8, 0.4, 1.6);
         if (hit?.shelf) props.spill(B.x + fx * L, B.y, B.z + fz * L, fx, fz, e.v);
+        if (G.mode === 'combat' && e.v > 7) combat.hurt(r, (e.v - 5) * 0.5);
       }
     }
     for (const b of G.blocks) { driveStep(W, b.body, { throttle: 0 }, DT, null); }
     const all = G.blocks.length ? [...G.racers, ...G.blocks] : G.racers;
     for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) bump(W, all[i], all[j]);
     if (G.rec && !P.finished) G.rec.sample(G.t, PB);
+    if (G.mode === 'combat') combat.step(DT);
   }
   // CPUs back on the road on their own; you get the R / Back / ↺ button (or this, if you're truly lost)
   if (P.off > 60 && !P.finished) P.respawn();
   for (const r of G.racers) { const B = r.body, S = VEHICLES[r.key]; if (B.grounded && Math.abs(B.slip || 0) > 0.2 && Math.abs(B.speed) > 8 && Math.random() < 0.5) puff(B.x - Math.sin(B.heading) * S.len * 0.3, B.y + 0.3, B.z - Math.cos(B.heading) * S.len * 0.3); }
+  if (G.mode === 'combat') { // the end: one car left, you're wrecked, or time's up
+    if (!combat.over && G.t >= COMBAT_TIME) { combat.over = true; msg('TIME!', 2.5); }
+    if (combat.over && G.endT <= 0 && !G.combatDone) { G.combatDone = true; G.endT = 2.8; if (!P.dead) msg(combat.standing()[0] === P ? 'LAST CAR STANDING!' : 'SURVIVED', 3, 'final'); }
+    G.haze = combat.player?.inCloud ? 1 : 0;
+    return;
+  }
   if (P.wrongT > 1 && G.msgT <= 0) msg('WRONG WAY', 0.6, 'bad');
   // everyone home (or 20 s after you): the results
   if (P.finished && (G.racers.every((r) => r.finished) || G.t - P.finishT > 20) && G.endT <= 0) showResults();
@@ -271,6 +305,8 @@ function cameraFor(dt) {
     camState.pos.x = damp(camState.pos.x, tmp.x, rate, dt); camState.pos.z = damp(camState.pos.z, tmp.z, rate, dt); camState.pos.y = damp(camState.pos.y, tmp.y, 4, dt);
     cam.position.copy(camState.pos); cam.lookAt(B.x + fx * 4, B.y + 1.0, B.z + fz * 4); cam.fov = 60 + clamp(Math.abs(B.speed), 0, 25) * 0.4;
   }
+  if (G.shake > 0) { cam.position.x += (Math.random() - 0.5) * G.shake * 0.5; cam.position.y += (Math.random() - 0.5) * G.shake * 0.4; G.shake = Math.max(0, G.shake - dt * 3); }
+  const hz = $('#haze'); G.hazeK = damp(G.hazeK || 0, G.state !== 'menu' && G.haze ? 1 : 0, 4, dt); hz.style.opacity = G.hazeK.toFixed(2);
   cam.updateProjectionMatrix();
   // the rear-view mirror: slides down while you're backing up
   G.mirror = damp(G.mirror, G.reversing && G.state === 'race' ? 1 : 0, 10, dt);
@@ -310,39 +346,53 @@ function render() {
 
 // ------------------------------------------------------------------ HUD
 function setHud(on) { document.body.classList.toggle('racing', on); }
-function msg(text, t, cls = '') { const el = $('#msg'); el.textContent = text; el.className = text ? `on ${cls}` : ''; G.msgT = t; }
+function msg(text, t, cls = '') { const el = $('#msg'); el.textContent = text; el.className = ''; if (text) { void el.offsetWidth; el.className = `on ${cls}`; } G.msgT = t; } // (the reflow restarts the slam)
 function hud() {
   const P = G.player; if (!P) return;
+  if (G.mode === 'combat') return combatHud(P);
   const st = standings(), pos = st.indexOf(P) + 1, lapNow = P.finished ? G.track.laps : clamp(P.c, 1, G.track.laps), lapT = G.state === 'race' && !P.finished ? G.t - P.lapStart : (P.laps.at(-1) ?? 0);
   $('#h-pos').innerHTML = G.mode === 'race' ? `${ordinal(pos).replace(/(\d+)(\D+)/, '$1<small>$2</small>')}<i>/${G.racers.length}</i>` : '<span class="tt">TIME TRIAL</span>';
   $('#h-lap').textContent = G.track.open ? `${Math.round(clamp(P.prog, 0, 1) * 100)}% TO THE MALL` : `LAP ${lapNow}/${G.track.laps}`;
   $('#h-time').textContent = fmt(P.finished ? P.finishT : G.t);
-  $('#h-laps').innerHTML = `Lap ${fmt(lapT)}<br>Best ${fmt(P.best)}`;
+  $('#h-laps').innerHTML = `<span class="lbl">LAP</span>${fmt(lapT)}<br><span class="lbl">BEST</span>${fmt(P.best)}`;
   speedo(Math.abs(P.body.speed) * 2.237);
-  $('#h-ghost').innerHTML = G.mode === 'tt' ? `Ghost: <b>${G.ghost.label}</b> ${fmt(G.ghost.t)}${G.splits.length ? ` <span class="${G.splits.at(-1) < 0 ? 'good' : 'bad'}">${fmtD(G.splits.at(-1))}</span>` : ''}` : '';
+  $('#h-ghost').innerHTML = G.mode === 'tt' ? `<span class="lbl">GHOST</span><b>${G.ghost.label}</b> ${fmt(G.ghost.t)}${G.splits.length ? ` <span class="${G.splits.at(-1) < 0 ? 'good' : 'bad'}">${fmtD(G.splits.at(-1))}</span>` : ''}` : '';
 }
 
-// The speedometer: a round dial in the corner, 0–80 MPH, white needle, the number in the middle (Driver's gauge).
-const sp = $('#speedo'), sg = sp.getContext('2d');
+function combatHud(P) {
+  const left = combat.alive().length;
+  $('#h-pos').innerHTML = `${left}<small> LEFT</small><i>/${G.racers.length}</i>`;
+  $('#h-lap').innerHTML = `<span class="hp"><span style="width:${Math.round(clamp(P.hp / 100, 0, 1) * 100)}%" class="${P.hp < 25 ? 'low' : P.hp < 50 ? 'mid' : ''}"></span></span>`;
+  $('#h-time').textContent = fmt(Math.max(0, COMBAT_TIME - G.t));
+  $('#h-laps').innerHTML = `<span class="lbl">KILLS</span>${P.kills}`;
+  const w = P.weapon ? WEAPONS[P.weapon] : null;
+  $('#h-ghost').innerHTML = P.sawT > 0 ? `<span class="wpn">🪚</span> <b>Chainsaw</b> ${P.sawT.toFixed(1)} s` : w ? `<span class="wpn">${w.icon}</span> <b>${w.name}</b> ×${P.ammo} <span class="lbl">${controls.usedTouch ? 'FIRE' : controls.usedPad ? 'Y' : 'F'}</span>` : '<span class="lbl">NO WEAPON</span> grab a pickup';
+  speedo(Math.abs(P.body.speed) * 2.237);
+}
+
+// The speedometer: a round cream dial in the corner (Dr. Mow's toy-ink look for now), 0–80 MPH, the number in the middle.
+const sp = $('#speedo'), sg = sp.getContext('2d'), INK = '#3b2e5a', POP = "'Luckiest Guy', 'Lilita One', system-ui, sans-serif";
 let lastMph = -1;
+document.fonts?.load(`20px ${POP}`).then(() => { lastMph = -1; }, () => {});
 function speedo(mph) {
   const v = Math.round(mph); if (v === lastMph) return; lastMph = v;
-  const w = sp.width, c = w / 2, r = c - 6, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, at = (m) => a0 + (a1 - a0) * clamp(m / 80, 0, 1);
+  const w = sp.width, c = w / 2, r = c - 10, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25, at = (m) => a0 + (a1 - a0) * clamp(m / 80, 0, 1);
+  const ring = (rr, fill) => { sg.beginPath(); sg.arc(c, c, rr, 0, Math.PI * 2); sg.fillStyle = fill; sg.fill(); };
   sg.clearRect(0, 0, w, w);
-  sg.fillStyle = 'rgba(12,16,30,0.78)'; sg.beginPath(); sg.arc(c, c, r + 4, 0, Math.PI * 2); sg.fill();
-  sg.strokeStyle = 'rgba(232,208,80,0.7)'; sg.lineWidth = 2; sg.beginPath(); sg.arc(c, c, r + 3, 0, Math.PI * 2); sg.stroke();
-  sg.strokeStyle = '#c83a2a'; sg.lineWidth = 6; sg.beginPath(); sg.arc(c, c, r - 6, at(60), a1); sg.stroke(); // (the red zone)
-  sg.fillStyle = '#f2ecd8'; sg.strokeStyle = '#f2ecd8'; sg.font = `bold ${Math.round(w * 0.085)}px Georgia, serif`; sg.textAlign = 'center'; sg.textBaseline = 'middle';
-  for (let m = 0; m <= 80; m += 5) {
-    const a = at(m), big = m % 10 === 0, i0 = r - (big ? 14 : 9), i1 = r - 3;
-    sg.lineWidth = big ? 2.5 : 1.2; sg.beginPath(); sg.moveTo(c + Math.cos(a) * i0, c + Math.sin(a) * i0); sg.lineTo(c + Math.cos(a) * i1, c + Math.sin(a) * i1); sg.stroke();
-    if (big && m % 20 === 0) sg.fillText(String(m), c + Math.cos(a) * (r - 26), c + Math.sin(a) * (r - 26));
-  }
+  ring(r + 6, INK); sg.save(); sg.translate(0, -5); ring(r + 6, INK); ring(r + 1, '#fffdf8'); sg.restore(); // (the hard drop shadow under it)
+  const cy = c - 5;
+  sg.lineCap = 'round';
+  sg.strokeStyle = '#efe9f7'; sg.lineWidth = 9; sg.beginPath(); sg.arc(c, cy, r - 9, a0, a1); sg.stroke();
+  sg.strokeStyle = v >= 60 ? '#ee4b5e' : '#3ddc84'; sg.beginPath(); sg.arc(c, cy, r - 9, a0, at(mph)); sg.stroke(); // (the speed fills the arc)
+  sg.strokeStyle = '#ee4b5e'; sg.lineWidth = 3; sg.beginPath(); sg.arc(c, cy, r - 2, at(60), a1); sg.stroke(); // (the red zone)
+  sg.fillStyle = INK; sg.strokeStyle = INK; sg.font = `${Math.round(w * 0.085)}px ${POP}`; sg.textAlign = 'center'; sg.textBaseline = 'middle';
+  for (let m = 0; m <= 80; m += 20) { const a = at(m); sg.fillText(String(m), c + Math.cos(a) * (r - 28), cy + Math.sin(a) * (r - 28) + 1); }
   const a = at(mph);
-  sg.strokeStyle = '#ff5a3a'; sg.lineWidth = 3.5; sg.beginPath(); sg.moveTo(c - Math.cos(a) * 10, c - Math.sin(a) * 10); sg.lineTo(c + Math.cos(a) * (r - 8), c + Math.sin(a) * (r - 8)); sg.stroke();
-  sg.fillStyle = '#1a1a1c'; sg.beginPath(); sg.arc(c, c, 7, 0, Math.PI * 2); sg.fill();
-  sg.fillStyle = '#e8d050'; sg.font = `bold italic ${Math.round(w * 0.19)}px Georgia, serif`; sg.fillText(String(v), c, c + r * 0.45);
-  sg.fillStyle = '#c8c0a8'; sg.font = `bold ${Math.round(w * 0.07)}px Georgia, serif`; sg.fillText('MPH', c, c + r * 0.72);
+  sg.lineWidth = 5; sg.beginPath(); sg.moveTo(c, cy); sg.lineTo(c + Math.cos(a) * (r - 14), cy + Math.sin(a) * (r - 14)); sg.stroke();
+  sg.strokeStyle = '#ff8a2a'; sg.lineWidth = 2.5; sg.stroke();
+  sg.beginPath(); sg.arc(c, cy, 7, 0, Math.PI * 2); sg.fillStyle = INK; sg.fill();
+  sg.font = `${Math.round(w * 0.2)}px ${POP}`; sg.lineJoin = 'round'; sg.lineWidth = 6; sg.strokeStyle = INK; sg.strokeText(String(v), c, cy + r * 0.5); sg.fillStyle = '#ffd45e'; sg.fillText(String(v), c, cy + r * 0.5);
+  sg.fillStyle = INK; sg.font = `${Math.round(w * 0.07)}px ${POP}`; sg.fillText('MPH', c, cy + r * 0.78);
 }
 
 // ------------------------------------------------------------------ menus (keys / pad / touch / mouse)
@@ -377,31 +427,34 @@ controls.onMenu = (d) => {
 controls.onAction = (a) => {
   if (a === 'pause' && (G.state === 'race' || G.state === 'countdown')) { G.paused = G.state; G.state = 'paused'; showMenu('pause'); return; }
   if (G.state !== 'race') return;
+  if (a === 'fire') { if (G.mode === 'combat') { combat.fire(G.player); return; } a = 'camera'; } // (Y is the camera outside Motor Murder)
   if (a === 'camera') { G.camMode = G.camMode === 'chase' ? 'bumper' : 'chase'; store.set('cam', G.camMode); msg(G.camMode === 'chase' ? 'CHASE CAM' : 'BUMPER CAM', 0.8); }
   if (a === 'reset' && !G.player.finished) G.player.respawn();
   if (a === 'hop') G.hop = true;
 };
 
+const circuits = () => (G.mode === 'combat' ? ROUTES.filter((r) => !r.open) : ROUTES); // (the last run is a run, not an arena)
 const best = (rk, ck) => store.get(`best:${rk}:${ck}`);
 const bar = (v) => `<span class="bar"><span style="width:${Math.round(clamp(v, 0.05, 1) * 100)}%"></span></span>`;
 const SCREENS = {
   title: () => ({
-    head: '<h1>SUBURBAN <i>TURISMO</i></h1><p class="tag">Racing in the neighbourhood. Mind the hedges.</p>',
+    head: `<h1 class="logo" aria-label="Suburban Turismo">${['SUBURBAN', 'TURISMO'].map((w, k) => `<span class="w w${k + 1}">${[...w].map((c, i) => `<span style="--i:${i + k * 8}">${c}</span>`).join('')}</span>`).join('')}</h1><p class="tag">Racing in the neighbourhood. Mind the hedges.</p>`,
     items: [
       { html: 'Race <small>3 laps against five of the neighbours</small>', go: () => { G.mode = 'race'; showMenu('circuit'); } },
       { html: 'Time Trial <small>you against the ghost: beat the pro, then yourself</small>', go: () => { G.mode = 'tt'; showMenu('circuit'); } },
+      { html: 'Motor Murder <small>the death match: fireworks, frozen turkeys, chainsaws, truck nuts; last car running wins</small>', cls: 'murder', go: () => { G.mode = 'combat'; if (G.route.open) G.route = ROUTES[0]; showMenu('circuit'); } },
       { html: 'The Last Run <small>final level: every location, every cop in the county, finish at the mall</small>', cls: 'final', go: () => { G.mode = 'race'; G.route = ROUTES.find((r) => r.final); showMenu('car'); } },
-      { html: `Time of day <small>◀ ${LIGHTS[light].name} ▶</small>`, cls: 'opt', go: () => { const ks = Object.keys(LIGHTS); light = ks[(ks.indexOf(light) + 1) % ks.length]; store.set('light', light); showMenu('title'); menu.focus = 3; paintFocus(); } },
-      { html: `Camera <small>◀ ${G.camMode === 'chase' ? 'Chase' : 'Bumper'} ▶</small>`, cls: 'opt', go: () => { G.camMode = G.camMode === 'chase' ? 'bumper' : 'chase'; store.set('cam', G.camMode); showMenu('title'); menu.focus = 4; paintFocus(); } },
+      { html: `Time of day <small>◀ ${LIGHTS[light].name} ▶</small>`, cls: 'opt', go: () => { const ks = Object.keys(LIGHTS); light = ks[(ks.indexOf(light) + 1) % ks.length]; store.set('light', light); showMenu('title'); menu.focus = 4; paintFocus(); } },
+      { html: `Camera <small>◀ ${G.camMode === 'chase' ? 'Chase' : 'Bumper'} ▶</small>`, cls: 'opt', go: () => { G.camMode = G.camMode === 'chase' ? 'bumper' : 'chase'; store.set('cam', G.camMode); showMenu('title'); menu.focus = 5; paintFocus(); } },
       ...(ART_TEST ? [{ html: 'Art test <small>the locations, cars and cast up close</small>', go: () => { location.href = 'viewer.html'; } }] : []),
     ],
-    foot: '<p class="keys">Keys: W/↑ gas · S/↓ brake, reverse · A D steer · brake + steer drifts · C camera · R back on track · Esc pause<br>Pad: RT / A gas · LT / B brake · stick steer · brake + steer drifts · Y camera · Back reset · Start pause<br>Touch: drag the left half to steer · pedals on the right</p>',
+    foot: '<p class="keys"><b>Keys</b> W/↑ gas · S/↓ brake, reverse · A D steer · brake + steer drifts · F fire · C camera · R back on track · Esc pause<br><b>Pad</b> RT / A gas · LT / B brake · stick steer · brake + steer drifts · Y fire (camera in races) · RB camera · Back reset · Start pause<br><b>Touch</b> drag the left half to steer · pedals on the right</p>',
   }),
   circuit: () => ({
-    head: `<h2>${G.mode === 'race' ? 'Race' : 'Time Trial'} · Circuit</h2>`,
+    head: `<h2>${{ race: 'Race', tt: 'Time Trial', combat: 'Motor Murder' }[G.mode]} · ${G.mode === 'combat' ? 'Arena' : 'Circuit'}</h2>`,
     back: () => showMenu('title'),
-    focus: ROUTES.indexOf(G.route),
-    items: [...ROUTES.map((r, i) => { const b = best(r.key, G.car); return { html: `<b>${i + 1}</b> ${r.name} <small>${(routeLength(r) / 1000).toFixed(2)} km · ${r.open ? 'one run, start to finish' : '3 laps'}${G.mode === 'tt' && b ? ` · best ${fmt(b.t)}` : ''}</small>`, hover: () => { G.route = r; $('#menu .blurb') && ($('#menu .blurb').textContent = r.blurb); }, go: () => { G.route = r; showMenu('car'); } }; }),
+    focus: Math.max(0, circuits().indexOf(G.route)),
+    items: [...circuits().map((r, i) => { const b = best(r.key, G.car); return { html: `<b>${i + 1}</b> ${r.name} <small>${(routeLength(r) / 1000).toFixed(2)} km · ${G.mode === 'combat' ? 'six cars, 3 minutes' : r.open ? 'one run, start to finish' : '3 laps'}${G.mode === 'tt' && b ? ` · best ${fmt(b.t)}` : ''}</small>`, hover: () => { G.route = r; $('#menu .blurb') && ($('#menu .blurb').textContent = r.blurb); }, go: () => { G.route = r; showMenu('car'); } }; }),
       { html: '◀ Back', cls: 'back', go: () => showMenu('title') }],
     foot: `<p class="blurb">${G.route.blurb}</p>`,
   }),
@@ -420,9 +473,10 @@ const SCREENS = {
   results: () => {
     const P = G.player, st = standings();
     let head;
-    if (G.mode === 'race') head = `<h2>${G.route.final ? (st.indexOf(P) === 0 ? 'You made it to the mall' : `Busted: ${st.indexOf(P)} cruiser${st.indexOf(P) > 1 ? 's' : ''} got there first`) : `${ordinal(st.indexOf(P) + 1)} place`}</h2><table>${st.map((r, i) => `<tr class="${r === P ? 'me' : ''}"><td>${i + 1}</td><td>${r.name}</td><td>${r.chase ? 'Police cruiser' : VEHICLES[r.key].kind}</td><td>${r.finished ? fmt(r.finishT) : G.track.open ? `${Math.round(clamp(r.prog, 0, 1) * 100)}%` : `lap ${clamp(r.c, 1, G.track.laps)}`}</td></tr>`).join('')}</table>`;
+    if (G.mode === 'combat') { const cs = combat.standing(), me = cs.indexOf(P); head = `<h2>${me === 0 ? 'Last car standing!' : P.dead ? `Wrecked: ${ordinal(me + 1)} of ${cs.length}` : `Survived: ${ordinal(me + 1)} on health`}</h2><table>${cs.map((r, i) => `<tr class="${r === P ? 'me' : ''}"><td>${i + 1}</td><td>${r.name}</td><td>${r.dead ? 'wrecked' : `${Math.ceil(r.hp)} hp`}</td><td>${r.kills} kill${r.kills === 1 ? '' : 's'}</td></tr>`).join('')}</table>`; }
+    else if (G.mode === 'race') head = `<h2>${G.route.final ? (st.indexOf(P) === 0 ? 'You made it to the mall' : `Busted: ${st.indexOf(P)} cruiser${st.indexOf(P) > 1 ? 's' : ''} got there first`) : `${ordinal(st.indexOf(P) + 1)} place`}</h2><table>${st.map((r, i) => `<tr class="${r === P ? 'me' : ''}"><td>${i + 1}</td><td>${r.name}</td><td>${r.chase ? 'Police cruiser' : VEHICLES[r.key].kind}</td><td>${r.finished ? fmt(r.finishT) : G.track.open ? `${Math.round(clamp(r.prog, 0, 1) * 100)}%` : `lap ${clamp(r.c, 1, G.track.laps)}`}</td></tr>`).join('')}</table>`;
     else head = `<h2>${G.newBest ? 'New best!' : 'Time trial'}</h2><table><tr class="me"><td>You</td><td>${fmt(P.finishT)}</td></tr><tr><td>Pro</td><td>${fmt(G.pro.t)}</td></tr>${G.best ? `<tr><td>Previous best</td><td>${fmt(G.best.t)}</td></tr>` : ''}</table><p class="note">${G.beatPro ? 'You beat the pro. From now on the ghost is your own best run.' : `The pro was ${(P.finishT - G.pro.t).toFixed(2)} s quicker. Beat that and the ghost becomes your own best run.`}</p><p class="note">Laps: ${P.laps.map(fmt).join(' · ')}</p>`;
-    return { head, back: () => showMenu('title'), items: [{ html: 'Race again', go: () => go() }, { html: 'Another circuit', go: () => showMenu('circuit') }, { html: 'Main menu', go: () => showMenu('title') }] };
+    return { head, back: () => showMenu('title'), items: [{ html: G.mode === 'combat' ? 'Rematch' : 'Race again', go: () => go() }, { html: G.mode === 'combat' ? 'Another arena' : 'Another circuit', go: () => showMenu('circuit') }, { html: 'Main menu', go: () => showMenu('title') }] };
   },
 };
 function go() { if (G.mode === 'tt' && !proCache.has(`${G.route.key}:${G.car}`) && !store.get(`pro:${G.route.key}:${G.car}`)) { msg('Timing the pro…', 5); setTimeout(() => startRace(), 30); } else startRace(); }
@@ -431,7 +485,7 @@ function showResults() { if (G.state === 'results') return; G.state = 'results';
 
 // ------------------------------------------------------------------ touch buttons, resize, start
 controls.bindPedal($('#t-gas'), 'gas'); controls.bindPedal($('#t-brake'), 'brake');
-controls.bindButton($('#t-cam'), 'camera'); controls.bindButton($('#t-reset'), 'reset'); controls.bindButton($('#t-pause'), 'pause');
+controls.bindButton($('#t-cam'), 'camera'); controls.bindButton($('#t-fire'), 'fire'); controls.bindButton($('#t-reset'), 'reset'); controls.bindButton($('#t-pause'), 'pause');
 const ART_TEST = !window.SINGLE_FILE; // (the single-file build has no viewer.html next to it)
 function resize() { const w = innerWidth, h = innerHeight; R.resize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
 addEventListener('resize', resize);
@@ -440,9 +494,9 @@ G.car = VEHICLE_ORDER.includes(params.get('car')) ? params.get('car') : (VEHICLE
 resize(); stage.applyLight(light);
 const qRoute = ROUTES.find((r) => r.key === params.get('circuit'));
 if (qRoute) G.route = qRoute;
-if (params.get('mode') === 'race' || params.get('mode') === 'tt') { G.mode = params.get('mode'); showMenu('title'); startRace(); } else showMenu('title');
+if (['race', 'tt', 'combat'].includes(params.get('mode'))) { G.mode = params.get('mode'); showMenu('title'); startRace(); } else showMenu('title');
 $('#loading')?.remove();
 requestAnimationFrame(frame);
 
 // For the test tool and the console.
-window.GAME = { G, startRace, tick, render, showMenu, standings, proGhost, props, get state() { return G.state; } };
+window.GAME = { G, combat, startRace, tick, render, showMenu, standings, proGhost, props, get state() { return G.state; } };

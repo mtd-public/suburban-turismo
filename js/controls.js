@@ -1,10 +1,10 @@
 // Racing controls: keyboard, gamepad and touch, all read into one { steer, gas, brake } per frame, plus one-shot
 // actions (camera, reset, pause) and menu navigation.
 //
-//   keys:  W / ↑ gas · S / ↓ brake, then reverse (with A / D at speed: a drift) · A D / ← → steer · Space hop · C camera ·
+//   keys:  W / ↑ gas · S / ↓ brake, then reverse (with A / D at speed: a drift) · A D / ← → steer · Space hop · F fire · C camera ·
 //          R back on the track · Esc / P pause.  Menus: arrows, Enter, Esc.
 //   pad:   left stick (or d-pad) steers, RT or A gas, LT or B brake / reverse (brake while steering at speed:
-//          a drift), Y camera, Back reset, Start pause, X hop.  Menus: stick / d-pad, A, B.
+//          a drift), Y fire (Motor Murder; the camera otherwise), RB camera, Back reset, Start pause, X hop.  Menus: stick / d-pad, A, B.
 //   touch: drag anywhere on the left half to steer (the further from where you put your thumb down, the harder),
 //          GAS and BRAKE pedals on the right, camera / reset / pause buttons along the top.
 //
@@ -19,7 +19,7 @@ export class Controls {
     this.wheel = null;                     // the steering touch: { id, x0, x }
     this.pedal = { gas: false, brake: false };
     this.padPrev = {};
-    this.onAction = null;                  // (name) → 'camera' | 'reset' | 'pause' | 'hop'
+    this.onAction = null;                  // (name) → 'camera' | 'reset' | 'pause' | 'hop' | 'fire'
     this.onMenu = null;                    // (dir) → 'up' | 'down' | 'left' | 'right' | 'ok' | 'back'
     this.usedTouch = false; this.usedPad = false;
     this.bind(zone);
@@ -42,7 +42,7 @@ export class Controls {
       this.keys.add(e.code);
       const menu = { ArrowUp: 'up', KeyW: 'up', ArrowDown: 'down', KeyS: 'down', ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', Enter: 'ok', Space: 'ok', Escape: 'back', Backspace: 'back' }[e.code];
       if (menu) this.onMenu?.(menu);
-      const act = { KeyC: 'camera', KeyV: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', Space: 'hop' }[e.code];
+      const act = { KeyC: 'camera', KeyV: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', Space: 'hop', KeyF: 'fire', KeyE: 'fire' }[e.code];
       if (act) this.onAction?.(act);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.code));
@@ -79,10 +79,10 @@ export class Controls {
       if (Math.abs(ax) > DEAD) { steer = Math.sign(ax) * (Math.abs(ax) - DEAD) / (1 - DEAD); this.usedPad = true; }
       if (b(14) > 0.5) steer = -1; if (b(15) > 0.5) steer = 1;
       gas = Math.max(gas, b(7), b(0)); brake = Math.max(brake, b(6), b(1));
-      const now = { a: b(0) > 0.5, b: b(1) > 0.5, x: b(2) > 0.5, y: b(3) > 0.5, back: b(8) > 0.5, start: b(9) > 0.5, up: b(12) > 0.5 || (gp.axes[1] || 0) < -0.6, down: b(13) > 0.5 || (gp.axes[1] || 0) > 0.6, left: b(14) > 0.5 || ax < -0.6, right: b(15) > 0.5 || ax > 0.6 }, was = this.padPrev;
+      const now = { a: b(0) > 0.5, b: b(1) > 0.5, x: b(2) > 0.5, y: b(3) > 0.5, rb: b(5) > 0.5, back: b(8) > 0.5, start: b(9) > 0.5, up: b(12) > 0.5 || (gp.axes[1] || 0) < -0.6, down: b(13) > 0.5 || (gp.axes[1] || 0) > 0.6, left: b(14) > 0.5 || ax < -0.6, right: b(15) > 0.5 || ax > 0.6 }, was = this.padPrev;
       const edge = (n) => now[n] && !was[n];
       if (Object.values(now).some(Boolean)) this.usedPad = true;
-      if (edge('y')) this.onAction?.('camera'); if (edge('back')) this.onAction?.('reset'); if (edge('start')) this.onAction?.('pause'); if (edge('x')) this.onAction?.('hop');
+      if (edge('y')) this.onAction?.('fire'); if (edge('rb')) this.onAction?.('camera'); if (edge('back')) this.onAction?.('reset'); if (edge('start')) this.onAction?.('pause'); if (edge('x')) this.onAction?.('hop');
       for (const d of ['up', 'down', 'left', 'right']) if (edge(d)) this.onMenu?.(d);
       if (edge('a')) this.onMenu?.('ok'); if (edge('b')) this.onMenu?.('back'); if (edge('start')) this.onMenu?.('ok');
       this.padPrev = now;

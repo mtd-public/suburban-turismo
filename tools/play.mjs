@@ -21,8 +21,8 @@ async function page(q = '', vp = { width: 1280, height: 720 }) {
   await p.waitForTimeout(300);
   return p;
 }
-const shot = async (p, name) => { await p.evaluate(() => { GAME.tick(0.016); GAME.render(); }); await p.screenshot({ path: `${OUT}/${name}.png` }); console.log('  ', name); };
-const run = (p, secs) => p.evaluate((n) => { for (let i = 0; i < n; i++) GAME.tick(1 / 30); }, Math.round(secs * 30));
+const shot = async (p, name) => { await p.waitForTimeout(350); await p.evaluate(() => { GAME.tick(0.016); GAME.render(); }); await p.screenshot({ path: `${OUT}/${name}.png` }); console.log('  ', name); };
+const run = async (p, secs) => { await p.waitForTimeout(30); return p.evaluate((n) => { for (let i = 0; i < n; i++) GAME.tick(1 / 30); }, Math.round(secs * 30)); }; // (the wait lets held keys land first)
 
 const p = await page();
 if (want('menu')) {
@@ -43,11 +43,23 @@ for (const mode of ['race', 'tt', 'final']) {
   if (r.state !== 'results') errors.push(`${mode}: no result after ${t} s`);
   await shot(p, `${mode}-results`);
 }
+if (want('combat')) { // Motor Murder on autopilot: the CPU drives you and fires; it must end (last car, wrecked or time)
+  await p.evaluate(([c, k]) => { GAME.G.auto = true; GAME.startRace('combat', c, k); }, [CIRCUIT, CAR]);
+  await run(p, 4); await shot(p, 'combat-go');
+  await p.evaluate(() => { const P = GAME.G.player; P.weapon = 'turkey'; P.ammo = 1; GAME.combat.fire(P); }); await run(p, 0.5); await shot(p, 'combat-turkey');
+  await p.evaluate(() => { const P = GAME.G.player; P.weapon = 'nuts'; P.ammo = 1; GAME.combat.fire(P); P.weapon = 'vape'; P.ammo = 1; P.cool = 0; GAME.combat.fire(P); P.weapon = 'chainsaw'; P.ammo = 1; P.cool = 0; GAME.combat.fire(P); }); await run(p, 1.2); await shot(p, 'combat-weapons');
+  let t = 0, seen = new Set();
+  while (t < 200 && (await p.evaluate(() => GAME.state)) !== 'results') { await run(p, 5); t += 5; (await p.evaluate(() => GAME.G.racers.map((r) => r.weapon).filter(Boolean))).forEach((w) => seen.add(w)); if (t === 15 || t === 45) await shot(p, `combat-mid${t}`); }
+  const r = await p.evaluate(() => ({ state: GAME.state, t: GAME.G.t.toFixed(1), field: GAME.combat.standing().map((x) => `${x.name}:${x.dead ? 'X' : Math.ceil(x.hp)}/${x.kills}k`) }));
+  console.log('   combat', JSON.stringify(r), 'weapons held:', [...seen].join(','));
+  if (r.state !== 'results') errors.push('combat: no result');
+  await shot(p, 'combat-results'); await p.evaluate(() => { GAME.G.auto = false; });
+}
 if (want('mirror')) { // backing up: the mirror pops up
   await p.evaluate(([c, k]) => { GAME.G.auto = false; GAME.startRace('race', c, k); }, [CIRCUIT, CAR]);
   await run(p, 5);
   await p.keyboard.down('KeyS'); await run(p, 1.5); await shot(p, 'mirror'); await p.keyboard.up('KeyS');
-  await p.keyboard.down('KeyW'); await run(p, 3); await p.keyboard.down('KeyS'); await p.keyboard.down('KeyD'); await run(p, 0.6);
+  await p.keyboard.down('KeyW'); await run(p, 1.3); console.log('   speed before the drift', await p.evaluate(() => GAME.G.player.body.speed.toFixed(1))); await p.keyboard.down('KeyS'); await p.keyboard.down('KeyD'); await run(p, 0.6);
   const slip = await p.evaluate(() => [GAME.G.drift, GAME.G.player.body.slip, GAME.G.player.body.speed]); console.log('   drift', JSON.stringify(slip));
   if (!slip[0]) errors.push('no drift on brake + steer'); await shot(p, 'drift'); await p.keyboard.up('KeyS'); await p.keyboard.up('KeyD'); await p.keyboard.up('KeyW');
   await p.keyboard.press('KeyC'); await p.keyboard.down('KeyW'); await run(p, 2); await shot(p, 'bumper'); await p.keyboard.up('KeyW'); await p.keyboard.press('KeyC');
