@@ -1,6 +1,7 @@
 name: Deploy (GitHub Pages)
 
-# Pushes to main publish the art test at https://mtd-public.github.io/suburban-turismo/ (store-smash's flow).
+# Pushes to main publish the game at https://mtd-public.github.io/suburban-turismo/ (the art test at viewer.html),
+# store-smash's flow. No build step: the page is plain ES modules, so the site is the files themselves.
 # Pages must use "GitHub Actions" as its source (repo → Settings → Pages); the configure step tries to switch it on.
 on:
   push:
@@ -27,10 +28,12 @@ jobs:
       - uses: actions/configure-pages@v5
         with:
           enablement: true
-      - name: Assemble site (only what the page serves)
+      - name: Syntax check (every module parses)
+        run: for f in js/*.js; do node --check "$f"; done
+      - name: Assemble site (only what the pages serve)
         run: |
           mkdir -p _site
-          cp -r index.html css js touch-zoom-guard _site/
+          cp -r index.html viewer.html css js assets touch-zoom-guard _site/
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:

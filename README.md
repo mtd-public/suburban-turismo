@@ -9,6 +9,10 @@ made them angry.
 are next. See [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) for the look and [docs/art-test/](docs/art-test/)
 for screenshots.
 
+## Live
+
+https://mtd-public.github.io/suburban-turismo/ (the game) and https://mtd-public.github.io/suburban-turismo/viewer.html (the art test), deployed from `main` by `.github/workflows/deploy.yml`.
+
 ## Run
 
 ```
