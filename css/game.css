@@ -1,0 +1,139 @@
+/* Suburban Turismo, the game. Placeholder UI borrowed from Dr. Mow's toy-ink look: cream cards and pills with thick
+   ink outlines and hard drop shadows, yellow for the focused / primary choice, Lilita One for titles and Luckiest
+   Guy for the big callouts and HUD numbers (both bundled in assets/fonts). Reserved colours: red = danger / cops,
+   green = good, yellow = reward and focus. */
+@font-face { font-family: 'Lilita One'; src: url('../assets/fonts/LilitaOne.ttf') format('truetype'); font-display: swap; } /* OFL */
+@font-face { font-family: 'Luckiest Guy'; src: url('../assets/fonts/LuckiestGuy.ttf') format('truetype'); font-display: swap; } /* Apache 2.0 */
+:root {
+  --ink: #3b2e5a; --ink-deep: #2a1f45; --cream: #fffdf8; --cream-a: #fffdf8ee; --well: #efe9f7;
+  --yellow: #ffd45e; --gold: #ffc53a; --orange: #ff8a2a; --red: #ee4b5e; --green: #3ddc84; --sky-deep: #2f8fd8; --purple: #6e5ac8;
+  --title: 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --pop: 'Luckiest Guy', 'Lilita One', 'Arial Rounded MT Bold', system-ui, sans-serif;
+  --body: "Trebuchet MS", "Avenir Next", system-ui, sans-serif;
+  --safe-top: max(10px, env(safe-area-inset-top)); --safe-bottom: max(12px, env(safe-area-inset-bottom));
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #2a1f45; color: var(--ink); font-family: var(--body); user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; image-rendering: pixelated; }
+button { font: inherit; color: var(--ink); cursor: pointer; touch-action: none; }
+/* chunky outlined lettering (stacked shadows, so it works everywhere) */
+.ol, #h-pos, #h-lap, #h-time, #msg {
+  --o: 2px; --mo: calc(var(--o) * -1); --ol: var(--ink-deep); --x: 4px;
+  text-shadow: var(--o) 0 var(--ol), var(--mo) 0 var(--ol), 0 var(--o) var(--ol), 0 var(--mo) var(--ol),
+    var(--o) var(--o) var(--ol), var(--mo) var(--o) var(--ol), var(--o) var(--mo) var(--ol), var(--mo) var(--mo) var(--ol),
+    0 var(--x) 0 var(--ol), var(--o) var(--x) 0 var(--ol), var(--mo) var(--x) 0 var(--ol), 0 calc(var(--x) + 4px) 8px #0006;
+}
+
+/* ---- HUD */
+#hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+body.racing #hud { display: block; }
+#h-left { position: absolute; top: var(--safe-top); left: max(14px, env(safe-area-inset-left)); }
+#h-pos { font: 400 58px/1 var(--pop); color: #fff4c2; --o: 3px; --x: 5px; rotate: -3deg; transform-origin: 0 100%; }
+#h-pos small { font-size: 28px; }
+#h-pos i { font-size: 26px; color: #fff; font-style: normal; margin-left: 4px; }
+#h-pos .tt { font-size: 26px; letter-spacing: 1px; color: #fff; }
+#h-lap { display: inline-block; margin-top: 8px; font: 400 18px/1 var(--pop); letter-spacing: 1.5px; color: #fff; --x: 3px; }
+#h-right { position: absolute; top: var(--safe-top); right: max(14px, env(safe-area-inset-right)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+#h-time { font: 400 34px/1 var(--pop); color: #fff4c2; letter-spacing: 1px; font-variant-numeric: tabular-nums; --o: 2.5px; }
+.pill { background: var(--cream-a); border: 3px solid var(--ink); border-radius: 14px; padding: 4px 10px; box-shadow: 0 4px 0 var(--ink); font-weight: 900; font-variant-numeric: tabular-nums; }
+#h-laps { font-size: 14px; line-height: 1.3; text-align: right; }
+#h-laps .lbl, #h-ghost .lbl { font-size: 10px; letter-spacing: 1.5px; opacity: .7; margin-right: 4px; }
+#h-ghost { font-size: 14px; }
+#h-ghost:empty { display: none; }
+#h-ghost b { color: var(--purple); }
+.good { color: #1b9e55 !important; } .bad { color: #d4453a !important; }
+#speedo { position: absolute; right: max(14px, env(safe-area-inset-right)); bottom: var(--safe-bottom); width: 168px; height: 168px; }
+
+/* the big callouts: 3 / 2 / 1 / GO!, FINAL LAP, splits, WRONG WAY: slammed in, tilted */
+#msg { position: fixed; left: 0; right: 0; top: 28%; text-align: center; font: 400 clamp(40px, 11vw, 72px)/1 var(--pop); letter-spacing: 2px; color: #fff4c2;
+  --o: 3px; --x: 6px; opacity: 0; pointer-events: none; z-index: 3; rotate: -3deg; text-transform: uppercase; }
+#msg.on { opacity: 1; animation: slam .35s cubic-bezier(.2, 1.6, .4, 1); }
+#msg.good { color: #8dff5a; } #msg.bad { color: #ff6b78; } #msg.final { color: #ffd23a; --ol: #4a2200; }
+@keyframes slam { 0% { transform: scale(2.2); opacity: 0 } 60% { transform: scale(.92); opacity: 1 } 100% { transform: none } }
+
+/* the rear-view mirror's frame (the view itself is drawn into the canvas underneath) */
+#mirror { display: none; position: fixed; z-index: 2; pointer-events: none; border: 4px solid var(--ink); border-radius: 12px; box-shadow: 0 4px 0 var(--ink-deep), 0 8px 14px rgba(0, 0, 0, .35); }
+
+/* ---- touch: drag the left half to steer, pedals on the right, small buttons top centre */
+#touch { display: none; }
+body.touch.racing #touch { display: block; }
+#touch .steer-hint { position: fixed; left: 0; width: 50%; bottom: 22px; text-align: center; font: 400 14px var(--pop); letter-spacing: 1px; color: #fff; opacity: .7; pointer-events: none; text-shadow: 0 2px 0 var(--ink); }
+#touch .pedal { position: fixed; bottom: var(--safe-bottom); width: 84px; height: 110px; border: 3px solid var(--ink); border-radius: 18px; background: var(--cream-a); box-shadow: 0 6px 0 var(--ink); font: 400 17px var(--pop); letter-spacing: 1px; z-index: 4; }
+#touch .pedal.gas { right: 16px; height: 130px; background: var(--yellow); }
+#touch .pedal.brake { right: 112px; background: #ffc2cc; }
+#touch .pedal.down { transform: translateY(4px); box-shadow: 0 2px 0 var(--ink); filter: brightness(.92); }
+#touch .tbtns { position: fixed; top: var(--safe-top); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 4; }
+#touch .tbtns button { width: 46px; height: 42px; border: 3px solid var(--ink); background: var(--cream-a); font-size: 16px; font-weight: 900; border-radius: 12px; box-shadow: 0 4px 0 var(--ink); }
+#touch .tbtns button:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+body.touch #speedo { bottom: auto; top: 128px; right: 10px; width: 112px; height: 112px; }
+
+/* ---- menus: a cream card on the left (the right half shows the overhead map of the circuit) */
+#menu { display: none; position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+#menu.on { display: block; }
+#menu .panel { pointer-events: auto; position: absolute; left: max(16px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); width: min(440px, 46vw); max-height: calc(100dvh - 32px); overflow: auto;
+  background: var(--cream); border: 4px solid var(--ink); border-radius: 24px; box-shadow: 0 8px 0 var(--ink), 0 14px 30px #0005; padding: 18px 18px 16px; animation: cardin .25s ease-out; }
+@keyframes cardin { from { opacity: 0; scale: .92 } }
+#menu.pause .panel, #menu.results .panel { left: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); text-align: center; }
+#menu.title .panel { overflow: visible; padding-top: 10px; }
+#menu h2 { margin: 0 0 12px; font: 400 28px/1.05 var(--title); letter-spacing: .5px; color: var(--purple); }
+#menu .tag { margin: 4px 0 14px; font-weight: 800; text-align: center; }
+#menu .items { display: flex; flex-direction: column; gap: 8px; }
+#menu button[data-i] { text-align: left; background: var(--cream); border: 3px solid var(--ink); border-radius: 16px; box-shadow: 0 4px 0 var(--ink); padding: 8px 14px; font: 400 21px/1.15 var(--title); letter-spacing: .3px; }
+#menu button[data-i]:active { transform: translateY(3px); box-shadow: 0 1px 0 var(--ink); }
+#menu button small { display: block; font: 700 12.5px/1.3 var(--body); opacity: .8; margin-top: 1px; letter-spacing: 0; }
+#menu button b { display: inline-block; min-width: 26px; height: 26px; line-height: 22px; margin-right: 6px; text-align: center; border: 2px solid var(--ink); border-radius: 50%; background: var(--sky-deep); color: #fff; font: 400 15px/22px var(--pop); vertical-align: 2px; }
+#menu button.focus { background: var(--yellow); outline: 3px solid #fff; outline-offset: -7px; }
+#menu button.final { background: #ffd9de; }
+#menu button.final.focus { background: var(--red); color: #fff; }
+#menu button.final::after { content: ''; display: block; height: 5px; margin-top: 6px; border-radius: 3px; background: repeating-linear-gradient(90deg, #e33 0 18px, #36f 18px 36px); animation: flash .5s steps(2) infinite; }
+@keyframes flash { to { background-position: 36px 0 } }
+#menu button.opt { font-size: 18px; padding: 6px 14px; }
+#menu button.back { font-size: 17px; padding: 6px 14px; align-self: flex-start; }
+#menu.pause .items, #menu.results .items { align-items: stretch; }
+#menu.pause button[data-i], #menu.results button[data-i] { text-align: center; }
+#menu .stats { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 3px 6px; align-items: center; font: 800 10.5px var(--body); letter-spacing: .5px; margin-top: 6px; }
+#menu .bar { display: inline-block; height: 9px; background: var(--well); border: 2px solid var(--ink); border-radius: 6px; overflow: hidden; }
+#menu .bar span { display: block; height: 100%; background: var(--green); }
+#menu .blurb, #menu .note { font-size: 14px; line-height: 1.4; margin: 14px 0 0; font-weight: 600; }
+#menu .blurb { background: var(--well); border-radius: 12px; padding: 8px 10px; }
+#menu .keys { font-size: 11.5px; line-height: 1.5; margin: 14px 0 0; opacity: .75; }
+#menu .keys b { font-weight: 900; }
+#menu table { width: 100%; border-collapse: collapse; font-size: 15px; margin-bottom: 14px; font-variant-numeric: tabular-nums; text-align: left; font-weight: 700; }
+#menu td { padding: 5px 6px; border-bottom: 2px dashed #d8d0e8; }
+#menu td:last-child { text-align: right; }
+#menu tr.me td { background: var(--yellow); font-weight: 900; }
+#menu tr.me td:first-child { border-radius: 8px 0 0 8px; } #menu tr.me td:last-child { border-radius: 0 8px 8px 0; }
+
+/* the wordmark: Dr. Mow's toy logo, tilted, letters bobbing */
+.logo { font: 400 54px/0.95 var(--title); letter-spacing: 1px; text-align: center; transform: rotate(-4deg); margin: 0 0 4px; white-space: nowrap; }
+.logo .w { display: block; }
+.logo span { display: inline-block; color: var(--c); -webkit-text-stroke: 5px var(--ink); paint-order: stroke fill;
+  text-shadow: 0 3px 0 var(--ink), 0 6px 0 var(--ink), 0 9px 0 var(--ink-deep), 0 12px 14px #0005;
+  animation: bob 2.4s ease-in-out infinite; animation-delay: calc(var(--i) * .1s); }
+.logo .w1 span { --c: var(--orange); }
+.logo .w2 { font-size: .82em; margin-top: 2px; } .logo .w2 span { --c: #6fd0ff; }
+@keyframes bob { 0%, 100% { transform: none } 50% { transform: translateY(-4px) } }
+@media (prefers-reduced-motion: reduce) { .logo span, #menu button.final::after { animation: none; } }
+
+@media (max-width: 760px) {
+  #menu .panel { left: 10px; right: 10px; width: auto; top: auto; bottom: var(--safe-bottom); transform: none; max-height: 58dvh; padding: 12px 14px; border-radius: 20px; }
+  #menu.pause .panel, #menu.results .panel { left: 10px; transform: none; width: auto; }
+  .logo { font-size: 38px; } #menu h2 { font-size: 23px; } #menu button[data-i] { font-size: 18px; padding: 6px 12px; } #menu .keys { display: none; }
+  #h-pos { font-size: 42px; } #h-time { font-size: 26px; }
+}
+@media (max-height: 520px) { .logo { font-size: 36px; } #menu .keys { display: none; } }
+
+#loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: #2a1f45; color: #fff; z-index: 9; font-family: var(--body); }
+#loading b { font: 400 34px var(--title); letter-spacing: 2px; color: var(--orange); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; }
+
+/* ---- Motor Murder: your health bar, the weapon you hold, the vape haze, the FIRE button */
+#h-lap .hp { display: block; width: 190px; height: 18px; background: var(--well); border: 3px solid var(--ink); border-radius: 9px; box-shadow: 0 3px 0 var(--ink); overflow: hidden; }
+#h-lap .hp span { display: block; height: 100%; background: var(--green); transition: width .15s; }
+#h-lap .hp span.mid { background: var(--gold); } #h-lap .hp span.low { background: var(--red); animation: blink .4s steps(2) infinite; }
+@keyframes blink { 50% { opacity: .45 } }
+#h-ghost .wpn { font-size: 20px; vertical-align: -3px; }
+#haze { position: fixed; inset: 0; pointer-events: none; z-index: 1; opacity: 0; background: radial-gradient(circle at 50% 60%, #f6e6ffd0, #e0fff4f0 70%); }
+#touch .pedal.fire { display: none; right: 16px; bottom: calc(var(--safe-bottom) + 146px); height: 70px; background: var(--red); color: #fff; }
+body.combat #touch .pedal.fire { display: block; }
+#menu button.murder { background: #ffe1c2; }
+#menu button.murder.focus { background: var(--orange); color: #fff; }

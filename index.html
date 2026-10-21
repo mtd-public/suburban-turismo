@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#2a1f45">
+  <title>Suburban Turismo</title>
+  <meta name="description" content="Suburban Turismo: a PS1-era racer through an autumn suburb. Races against the neighbours, ghost time trials, hedges, hydrants and CityMart's front windows.">
+  <link rel="stylesheet" href="touch-zoom-guard/touch-zoom-guard.css">
+  <link rel="preload" href="assets/fonts/LuckiestGuy.ttf" as="font" type="font/ttf" crossorigin>
+  <link rel="stylesheet" href="css/game.css">
+  <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div id="h-left"><div id="h-pos"></div><div id="h-lap"></div></div>
+    <div id="h-right"><div id="h-time"></div><div id="h-laps" class="pill"></div><div id="h-ghost" class="pill"></div></div>
+    <canvas id="speedo" width="168" height="168"></canvas>
+  </div>
+  <div id="mirror"></div>
+  <div id="haze"></div>
+  <div id="msg"></div>
+
+  <div id="touch" data-touch-allow>
+    <div class="steer-hint">◀ drag to steer ▶</div>
+    <button id="t-brake" class="pedal brake" aria-label="Brake / reverse">BRAKE</button>
+    <button id="t-gas" class="pedal gas" aria-label="Gas">GAS</button>
+    <div class="tbtns"><button id="t-cam" aria-label="Camera">🎥</button><button id="t-reset" aria-label="Back on track">↺</button><button id="t-pause" aria-label="Pause">❚❚</button></div>
+    <button id="t-fire" class="pedal fire" aria-label="Fire weapon">FIRE</button>
+  </div>
+
+  <div id="menu" data-touch-allow></div>
+  <div id="loading"><b>SUBURBAN TURISMO</b><p>Raking the leaves…</p></div>
+
+  <script src="touch-zoom-guard/touch-zoom-guard.js"></script>
+  <script>window.TouchZoomGuard && TouchZoomGuard.init();</script>
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

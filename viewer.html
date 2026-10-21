@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1a2238">
+  <title>Suburban Turismo — Art Test</title>
+  <meta name="description" content="Suburban Turismo art test: a PS1-era low-poly suburb in autumn, five test vehicles and the suburban cast.">
+  <link rel="stylesheet" href="touch-zoom-guard/touch-zoom-guard.css">
+  <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">{ "imports": { "three": "./js/vendor/three.module.min.js" } }</script>
+</head>
+<body data-mode="tour">
+  <canvas id="game"></canvas>
+
+  <nav id="tabs" data-touch-allow>
+    <span class="logo">SUBURBAN <i>TURISMO</i> <small>art test</small></span>
+    <button data-tab="tour">Locations</button><button data-tab="garage">Garage</button><button data-tab="cast">Cast</button><button data-tab="drive">Drive</button><button data-tab="map">Routes</button>
+    <button id="btn-ps1" class="ps1" aria-label="PS1 settings">PS1 ⚙</button>
+  </nav>
+
+  <div id="drivehud">
+    <div class="bar"><label>Damage</label><div class="track"><div id="bar-dmg" class="fill dmg"></div></div></div>
+    <div class="bar"><label>HOA Complaints</label><div class="track"><div id="bar-hoa" class="fill hoa"></div></div></div>
+  </div>
+  <div id="flash"></div>
+  <div id="maplabels"></div>
+  <canvas id="minimap" width="150" height="150"></canvas>
+
+  <section id="caption" data-touch-allow>
+    <button id="prev" aria-label="Previous">◀</button>
+    <div class="txt"><h1 id="cap-title"></h1><h2 id="cap-sub"></h2><p id="cap-blurb"></p></div>
+    <button id="next" aria-label="Next">▶</button>
+  </section>
+
+  <aside id="panel" data-touch-allow>
+    <h3>PS1 dose</h3>
+    <label>Resolution <input id="r-lines" type="range" min="180" max="480" step="12"><output></output></label>
+    <label>Vertex jitter <input id="r-jitter" type="range" min="0" max="1" step="0.05"><output></output></label>
+    <label>Affine warp <input id="r-affine" type="range" min="0" max="1" step="0.05"><output></output></label>
+    <label>Draw distance <input id="r-fogfar" type="range" min="120" max="400" step="10"><output></output></label>
+    <label class="chk"><input id="c-dither" type="checkbox"> 15-bit colour + dither</label>
+    <label class="chk"><input id="c-native" type="checkbox"> Full resolution (compare)</label>
+    <h3>Time of day</h3>
+    <div class="lights"><button data-light="autumn">Autumn</button><button data-light="golden">Golden hour</button><button data-light="overcast">Overcast</button><button data-light="dusk">Dusk</button></div>
+  </aside>
+
+  <div id="loading"><b>SUBURBAN TURISMO</b><p>Raking the leaves…</p></div>
+
+  <script src="touch-zoom-guard/touch-zoom-guard.js"></script>
+  <script>window.TouchZoomGuard && TouchZoomGuard.init();</script>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

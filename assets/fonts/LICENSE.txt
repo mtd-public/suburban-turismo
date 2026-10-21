@@ -1,0 +1,2 @@
+Lilita One by Juan Montoreano, SIL Open Font License 1.1 (https://fonts.google.com/specimen/Lilita+One). Bundled locally so the logo works offline.
+Luckiest Guy by Astigmatic, Apache License 2.0 (https://fonts.google.com/specimen/Luckiest+Guy). Bundled locally for the in-game popups.
