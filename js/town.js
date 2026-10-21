@@ -16,7 +16,7 @@ import { mulberry32 } from './utils.js';
 const ROAD_HW = 7, KERB = 0.15;
 
 export function buildTown() {
-  const S = new THREE.Group(), plats = [], posts = [], spots = {}, lamps = [];
+  const S = new THREE.Group(), plats = [], posts = [], spots = {}, lamps = [], dyn = [], glass = [];
   const rnd = mulberry32(2026);
   const add = (o) => { S.add(o); return o; };
   const solid = (x, z, w, d, h) => plats.push({ x, z, w, d, h, thick: h });
@@ -120,12 +120,12 @@ export function buildTown() {
     c.position.set(x, 0, z); c.rotation.y = ry; add(c);
     const s = c.userData.spec; solidRot(x, z, s.width, s.len, ry, 1.5);
   }
-  function fillRow(x0, z, n, ry, w = 2.8, chance = 0.55) { for (let i = 0; i < n; i++) if (rnd() < chance) parkedCar(x0 + w * (i + 0.5), z, ry + (rnd() - 0.5) * 0.06); }
+  function fillRow(x0, z, n, ry, w = 2.8, chance = 0.55, keep = () => true) { for (let i = 0; i < n; i++) if (rnd() < chance && keep(x0 + w * (i + 0.5))) parkedCar(x0 + w * (i + 0.5), z, ry + (rnd() - 0.5) * 0.06); }
   function bench(x, z, ry) {
     const g = new THREE.Group(); g.add(baseBox(1.6, 0.06, 0.45, M.wood, 1, 0, 0.42, 0)); g.add(baseBox(1.6, 0.4, 0.06, M.wood, 1, 0, 0.5, -0.22));
     for (const s of [-0.7, 0.7]) g.add(baseBox(0.06, 0.45, 0.4, M.dark, null, s, 0, 0)); g.position.set(x, 0, z); g.rotation.y = ry; add(g);
   }
-  function bin(x, z, color = 0x2a4a3a) { add(baseBox(0.6, 1.0, 0.6, lam(color, T.grit()), null, x, 0, z)); post(x, z, 0.35, 1); }
+  function bin(x, z) { dyn.push(['bin', x, z]); }
   function sign(x, z, ry, text, o = {}) { // a monument / pole sign face
     const w = o.w ?? 4, h = o.h ?? 1;
     const g = new THREE.Group();
@@ -153,7 +153,9 @@ export function buildTown() {
       solid(sx + s * 5.4, (z0 + z1) / 2 - 2, 1.6, -z1 + z0 + 1, KERB);
     }
     sign(sx - 9, -14, Math.PI / 4, 'Whispering Pines', { monument: true, w: 4.2, h: 1.0, tex: { bg: '#3a3a30', fg: '#e8dcb0', font: 'italic bold 15px Georgia, serif', sub: 'ESTATES · EST. 1994', subFont: 'bold 6px Georgia, serif', w: 128, h: 32 } });
-    for (let i = 0; i < 5; i++) pumpkin(sx - 9 + (i - 2) * 0.55, -12.6, 0.8 + (i % 2) * 0.4);
+    for (let i = 0; i < 5; i++) dyn.push(['pumpkin', sx - 9 + (i - 2) * 0.6, -12.6]);
+    for (const z of [-22, -36, -50, -64]) { dyn.push(['leafbag', sx - 4.0, z, rnd()]); dyn.push(['leafbag', sx - 4.0, z - 0.8, rnd()]); dyn.push(['bin', sx + 4.0, z + 3]); }
+    for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; dyn.push(['pumpkin', sx + Math.cos(a) * 3.3, bz + Math.sin(a) * 3.3]); }
     // the houses: [x, z, facing point, palette, storeys, garage open?, extras]
     const H = [
       [-151, -30, 1, 0xc8b89a, 2, true, ['hoop']], [-151, -58, 1, 0x8a98a4, 1, false, ['piles']], [-109, -30, -1, 0xe0dccf, 2, false, ['jones']],
@@ -388,22 +390,79 @@ export function buildTown() {
     // the parking field: four double rows, islands with trees at the ends, light poles, cart corrals
     for (const z of [-24, -42, -60, -78]) {
       parkingRow(56, z, 46, 1, 2.8, 5.2); parkingRow(56, z, 46, -1, 2.8, 5.2);
-      fillRow(56, z + 2.6, 46, 0, 2.8, z > -50 ? 0.12 : 0.3); fillRow(56, z - 2.6, 46, Math.PI, 2.8, z > -50 ? 0.12 : 0.28);
+      const clear = (x) => Math.abs(x - 90) > 4 && Math.abs(x - 145) > 4; // nobody parks in front of the doors: a straight run from the road to the glass
+      fillRow(56, z + 2.6, 46, 0, 2.8, z > -50 ? 0.12 : 0.3, clear); fillRow(56, z - 2.6, 46, Math.PI, 2.8, z > -50 ? 0.12 : 0.28, clear);
       for (const ix of [54, 187]) { add(baseBox(3, 0.2, 10, M.kerb, 2, ix, 0, z)); add(patch(ix - 1.4, z - 4.9, ix + 1.4, z + 4.9, M.mulch, 2, 0.21)); add(tree(ix, z, 0.9, (ix + z) & 5 + 1, T.FALL[((ix - z) & 7) % 7])); solid(ix, z, 3, 10, 0.2); }
-      for (const lx of [90, 130, 170]) lightPole(lx, z, 11);
+      for (const lx of [112, 130, 170]) lightPole(lx, z, 11);
       for (const cx of [100, 150]) { const cc = new THREE.Group(); for (const s of [-1, 1]) cc.add(baseBox(0.06, 1.0, 5, M.pole, null, s * 0.7, 0, 0)); cc.add(baseBox(1.5, 0.06, 5, M.pole, null, 0, 1.0, 0)); cc.add(baseBox(1.5, 0.9, 0.06, lam(0xffffff, T.sign('CARTS', { w: 32, h: 16, bg: '#2a5aa8', font: 'bold 8px Arial' })), [null, null, null, null, 1, 1].map((v) => v), 0, 0.05, 2.5)); cc.position.set(cx, 0, z + 1.4); add(cc); solid(cx, z + 1.4, 1.5, 5, 1); }
     }
-    // the store box: tilt-up flanks, a taller front with two vestibules and the big sign
-    const sw = 120, sx = 120, sh = 10, sdep = sz0 - sz1;
-    const tilt = lam(0xffffff, T.tiltup());
-    add(baseBox(sw, sh, sdep, [tilt, tilt, M.slab, tilt, tilt, tilt], [8, 8, 8, 8, 8, 8], sx, 0, (sz0 + sz1) / 2)); solid(sx, (sz0 + sz1) / 2, sw, sdep, sh);
+    // the store: a hollow tilt-up box you can drive into (through the vestibule glass), Super-centre layout inside
+    const sw = 120, sx = 120, sh = 10, sdep = sz0 - sz1, zc = (sz0 + sz1) / 2;
+    const tilt = lam(0xffffff, T.tiltup()), inW = lam(0xd2cec6, T.storeWall());
+    const wall = (w, d, x, z, inner, y0 = 0, h = sh) => { const f = [tilt, tilt, M.slab, M.slab, tilt, tilt]; f[inner] = inW; add(baseBox(w, h, d, f, [8, 8, 2, 2, 8, 8].map((t, i) => (i === inner ? 4 : t)), x, y0, z)); if (y0 < 2) solid(x, z, w, d, h + y0); };
+    wall(sw, 0.6, sx, sz1 + 0.3, 4); wall(0.6, sdep, sx - sw / 2 + 0.3, zc, 0); wall(0.6, sdep, sx + sw / 2 - 0.3, zc, 1);
+    const doors = [[sx - 35, sx - 25], [sx + 25, sx + 35]];
+    for (const [a, b] of [[sx - sw / 2, doors[0][0]], [doors[0][1], doors[1][0]], [doors[1][1], sx + sw / 2]]) wall(b - a, 0.6, (a + b) / 2, sz0 - 0.3, 5);
+    for (const [a, b] of doors) wall(b - a, 0.6, (a + b) / 2, sz0 - 0.3, 5, 4, sh - 4);
+    add(baseBox(sw, 0.4, sdep, [tilt, tilt, M.slab, basic(0xe0e0dc, T.ceiling()), tilt, tilt], [8, 8, 8, 6, 8, 8], sx, sh - 0.4, zc)); // roof deck
     add(baseBox(sw + 0.4, 1.0, 0.6, lam(0x2a5aa8, T.grit()), null, sx, sh, sz0 + 0.1));
     add(baseBox(sw, KERB, 6, [M.kerb, M.kerb, M.concrete, M.kerb, M.kerb, M.kerb], [2, 2, 3, 2, 2, 2], sx, 0, sz0 + 3)); solid(sx, sz0 + 3, sw, 6, KERB);
-    for (const vx of [sx - 30, sx + 30]) {
-      add(baseBox(14, 7, 6, lam(0xffffff, T.stucco(0xd8d0c0)), 3, vx, 0, sz0 + 3)); solid(vx, sz0 + 3, 14, 6, 7);
-      add(decal(10, 3.6, lam(0xffffff, T.storefront([50, 54, 60])), vx, 2.0, sz0 + 6.03));
-      add(decal(9, 1.0, lam(0xffffff, T.sign(vx < sx ? 'GROCERY · PHARMACY' : 'HOME · GARDEN · AUTO', { w: 128, h: 16, bg: '#2a5aa8', font: 'bold 9px Arial' })), vx, 5.8, sz0 + 6.04));
+    add(baseBox(sw - 1.2, KERB, sdep - 1.2, [M.kerb, M.kerb, lam(0xc4c0b6, T.storeFloor()), M.kerb, M.kerb, M.kerb], [2, 2, 4, 2, 2, 2], sx, 0, zc)); solid(sx, zc, sw - 1.2, sdep - 1.2, KERB);
+    const strip = basic(0xf4f6f2);
+    for (let z = sz0 - 4; z > sz1 + 2; z -= 8) for (let x = sx - sw / 2 + 5; x < sx + sw / 2 - 4; x += 6) add(baseBox(3.6, 0.06, 0.35, strip, null, x, sh - 0.7, z)); // fluorescent fixtures
+    // the vestibules: side walls, roof, a fascia with the department sign, and the glass you can drive through
+    for (const [a, b] of doors) {
+      const vx = (a + b) / 2, st = lam(0xffffff, T.stucco(0xd8d0c0));
+      for (const s of [-1, 1]) { add(baseBox(0.3, 7, 6, st, 3, vx + s * 7.15, 0, sz0 + 3)); solid(vx + s * 7.15, sz0 + 3, 0.3, 6, 7); }
+      add(baseBox(14.6, 0.4, 6, [st, st, M.slab, basic(0xe0e0dc, T.ceiling()), st, st], 3, vx, 6.6, sz0 + 3));
+      add(baseBox(14.6, 2.6, 0.3, st, 3, vx, 4.0, sz0 + 5.85));
+      add(decal(9, 1.0, lam(0xffffff, T.sign(vx < sx ? 'GROCERY · PHARMACY' : 'HOME · GARDEN · AUTO', { w: 128, h: 16, bg: '#2a5aa8', font: 'bold 9px Arial' })), vx, 5.6, sz0 + 6.02));
+      const pane = new THREE.Mesh(new THREE.BoxGeometry(14, 4, 0.1), lam(0xffffff, T.storefront([60, 70, 80]), { transparent: true, opacity: 0.8 }));
+      pane.position.set(vx, 2.0 + KERB, sz0 + 5.85); glass.push({ mesh: pane, plat: { x: vx, z: sz0 + 5.85, w: 14, d: 0.4, h: 4.2, thick: 4.2 } });
     }
+    // checkouts along the front, with gaps at both entrances
+    const coM = lam(0xffffff, T.checkout()), dark = M.dark;
+    let lane = 1;
+    for (let x = sx - 54; x <= sx + 54; x += 6) {
+      if (doors.some(([a, b]) => x > a - 3 && x < b + 3)) continue;
+      add(baseBox(0.9, 0.95, 4, coM, 1, x, KERB, sz0 - 10)); solid(x, sz0 - 10, 0.9, 4, 1.1);
+      add(baseBox(0.5, 0.35, 0.5, dark, null, x, KERB + 0.95, sz0 - 8.6));
+      add(baseBox(0.08, 2.4, 0.08, M.pole, null, x - 0.3, KERB + 0.95, sz0 - 11.7));
+      add(decal(0.5, 0.5, lam(0xffffff, T.sign(String(lane++), { w: 16, h: 16, bg: '#2a5aa8', font: 'bold 11px Arial', grime: 0 })), x - 0.3, KERB + 3.4, sz0 - 11.66));
+    }
+    // grocery (west): reach-in freezers on the west and back walls, aisles of gondolas, produce up front
+    const fr = lam(0xffffff, T.fridgeDoors());
+    add(baseBox(1.0, 2.5, 46, [fr, M.kerb, M.slab, M.slab, M.kerb, M.kerb], [2.6, 1, 1, 1, 1, 1], sx - sw / 2 + 1.1, KERB, zc - 6)); solid(sx - sw / 2 + 1.1, zc - 6, 1.0, 46, 2.6);
+    add(baseBox(54, 2.5, 1.0, [M.kerb, M.kerb, M.slab, M.slab, fr, M.kerb], [1, 1, 1, 1, 2.6, 1], sx - 31, KERB, sz1 + 1.1)); solid(sx - 31, sz1 + 1.1, 54, 1.0, 2.6);
+    const gondola = (x, z, len, kind) => {
+      const sm = lam(0xffffff, T.shelfStock(kind));
+      add(baseBox(1.3, 2.1, len, [sm, sm, M.slab, M.slab, sm, sm], [2, 2, 1, 1, 1.3, 1.3], x, KERB, z));
+      solid(x, z, 1.3, len, 2.25); plats[plats.length - 1].shelf = true;
+    };
+    for (let i = 0; i < 6; i++) gondola(sx - 34 + i * 6, zc - 8, 26, i % 3 === 2 ? 'paper' : 'grocery');
+    // general merchandise (east): toy and home aisles, the TV wall, apparel racks, pharmacy at the back
+    for (let i = 0; i < 5; i++) gondola(sx + 30 + i * 6, zc + 2, 22, i < 2 ? 'toys' : 'gm');
+    add(baseBox(52, 2.8, 0.8, [M.kerb, M.kerb, M.slab, M.slab, lam(0xffffff, T.tvWall()), M.kerb], [1, 1, 1, 1, 4, 1], sx + 32, KERB, sz1 + 1.0)); solid(sx + 32, sz1 + 1.0, 52, 0.8, 2.9);
+    for (let i = 0; i < 9; i++) { const x = sx + 6 + (i % 3) * 5, z = zc + 14 - (i / 3 | 0) * 5; add(baseBox(0.08, 1.5, 0.08, M.pole, null, x, KERB, z)); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.0, 8, 1, true), lam([0x7a2a3a, 0x2a4a6a, 0xc8a86a, 0x4a6a4a][i % 4], T.grit(40), { side: THREE.DoubleSide })); r.position.set(x, KERB + 0.9, z); add(r); post(x, z, 0.8, 1.5); }
+    add(baseBox(12, 1.1, 1.0, [coM, coM, M.slab, M.slab, coM, coM], 2, sx, KERB, sz1 + 5)); solid(sx, sz1 + 5, 12, 1.0, 1.25);
+    add(baseBox(12, 4, 0.4, inW, 4, sx, KERB, sz1 + 1.3));
+    // hanging department signs
+    const hang = (text, x, z, ry = 0) => { const g = new THREE.Group(); const m = lam(0xffffff, T.sign(text, { w: 64, h: 16, bg: '#2a5aa8', font: 'bold 10px Arial', grime: 0 })); g.add(baseBox(4.2, 1.0, 0.1, lam(0x2a5aa8), null, 0, 0, 0)); g.add(decal(4, 0.9, m, 0, 0.5, 0.06)); g.add(decal(4, 0.9, m, 0, 0.5, -0.06, Math.PI)); g.add(baseBox(0.03, sh - 7.5, 0.03, M.pole, null, -1.5, 1, 0)); g.add(baseBox(0.03, sh - 7.5, 0.03, M.pole, null, 1.5, 1, 0)); g.position.set(x, 6.2, z); g.rotation.y = ry; add(g); };
+    hang('GROCERY', sx - 19, zc - 8); hang('PRODUCE', sx - 48, sz0 - 18); hang('FROZEN', sx - 55, zc - 6, Math.PI / 2); hang('TOYS', sx + 36, zc + 2); hang('HOME', sx + 48, zc + 2);
+    hang('ELECTRONICS', sx + 32, sz1 + 6); hang('APPAREL', sx + 11, zc + 18); hang('PHARMACY', sx, sz1 + 7); hang('FALL HARVEST', sx, sz0 - 15);
+    // what you can knock over inside
+    for (const x of [sx - 22, sx - 10, sx + 8, sx + 20]) dyn.push(['soda', x, sz0 - 15.5]);
+    for (let i = 0; i < 8; i++) dyn.push(['produce', sx - 54 + (i % 4) * 3.2, sz0 - 18 - (i / 4 | 0) * 3.2]);
+    for (let i = 0; i < 6; i++) dyn.push(['produce', sx - 4 + (i % 3) * 3, sz0 - 18 - (i / 3 | 0) * 2.6]); // the seasonal pumpkin bins
+    for (let i = 0; i < 6; i++) dyn.push(['mannequin', sx + 4 + i * 2.6, zc + 19.5, rnd() * 6]);
+    for (let i = 0; i < 10; i++) dyn.push(['cart', sx - 50 + rnd() * 100, sz0 - 13.5 - rnd() * 3, rnd() * 6]);
+    for (let i = 0; i < 6; i++) dyn.push(['boxes', sx - 34 + i * 6, zc - 22.6, rnd()]);
+    for (let i = 0; i < 5; i++) dyn.push(['boxes', sx + 30 + i * 6, zc - 10.6, rnd()]);
+    // outside: loose carts in the lot, cones on the fire lane, news boxes and bins by the doors
+    for (let i = 0; i < 16; i++) dyn.push(['cart', 60 + rnd() * 125, -16 - rnd() * 70, rnd() * 6]);
+    dyn.push(['cart', 90.6, -58, 1.2], ['cart', 89.4, -72, 2.6], ['cone', 91, -84], ['cone', 89, -85]); // strays in the door aisle
+    for (let i = 0; i < 6; i++) dyn.push(['cone', sx - 50 + i * 20, sz0 + 9]);
+    for (const [a, b] of doors) { dyn.push(['newsbox', a - 2.5, sz0 + 4.5]); dyn.push(['bin', b + 2.5, sz0 + 4.5]); dyn.push(['cart', b + 4.5, sz0 + 3.5, 0.2]); dyn.push(['cart', b + 5.2, sz0 + 3.5, 0.1]); }
     add(decal(28, 5, lam(0xffffff, T.sign('CityMart', { w: 128, h: 24, bg: '#d8d2c4', fg: '#1e4aa0', font: 'bold 22px Arial, sans-serif', grime: 0.3 })), sx, 6.4, sz0 + 0.03));
     const star = new THREE.Mesh(new THREE.CircleGeometry(2.2, 8), basic(0xf2c230)); star.position.set(sx + 16, 7.2, sz0 + 0.06); add(star);
     add(decal(16, 1.2, lam(0xffffff, T.sign('SAVE MORE · THINK LESS', { w: 128, h: 12, bg: '#d8d2c4', fg: '#2a2a2a', font: 'bold 9px Arial' })), sx, 3.4, sz0 + 0.04));
@@ -417,7 +476,7 @@ export function buildTown() {
     add(baseBox(1.6, 2.2, 0.8, lam(0xa82020, T.grit()), null, sx - 15, KERB, sz0 + 5.4)); add(decal(1.4, 0.4, lam(0xffffff, T.sign('BLOCKBOX', { w: 32, h: 8, bg: '#a82020', fg: '#fff', font: 'bold 6px Arial' })), sx - 15, 2.1, sz0 + 5.82));
     // the pole sign by the parkway
     sign(68, -14, 0, 'CityMart', { y: 10, w: 7, h: 2.4, tex: { w: 96, h: 32, bg: '#1e4aa0', fg: '#ffffff', font: 'bold 20px Arial', sub: 'OPEN 24 HOURS · PHARMACY', subFont: 'bold 6px Arial' } });
-    spots.doris = { x: sx - 30, z: sz0 + 7.4, ry: 0 };
+    spots.doris = { x: sx - 35.5, z: sz0 + 7.4, ry: 0.3 }; // beside the door, not in it
   }
 
   // ------------------------------------------------------------ woods: autumn tree stands in the gaps between places
@@ -444,7 +503,7 @@ export function buildTown() {
   for (const [x, z] of lamps) { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 9), poolM); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.24, z); pools.add(m); }
 
   const merged = mergeStatic(S);
-  return { group: merged, pools, plats, posts, spots };
+  return { group: merged, pools, plats, posts, spots, dyn, glass };
 }
 
 // Named camera stops for the location tour: [label, blurb, camera position, look-at].
@@ -454,5 +513,6 @@ export const LOCATIONS = [
   { key: 'mcdaniels', name: "McDaniel's", blurb: 'Brick, a red mansard band, a burger on a pole. The drive-thru lane wraps round the back past the menu board to Window 2, where the ice cream machine is broken.', cams: [[[8, 4, -6], [-10, 3, -40]], [[-36, 3, -32], [-12, 2, -48]], [[-20, 2.2, -56], [-12, 2, -40]]] },
   { key: 'promenade', name: 'The Promenade at Maple Creek', blurb: 'The outdoor mall: a colonnade, awnings, a fountain nobody throws money into anymore, and the 7 a.m. mall walkers who will not yield.', cams: [[[60, 5, 36], [60, 3, 70]], [[0, 2.5, 58], [70, 3, 66]], [[110, 9, 30], [50, 2, 66]]] },
   { key: 'citymart', name: 'CityMart', blurb: 'A box the size of a county, a lot the size of a smaller county. Cart corrals, 11 m light poles, a garden centre behind chain-link and Doris at the door.', cams: [[[120, 6, -30], [120, 4, -96]], [[60, 4, -50], [120, 3, -90]], [[170, 14, -18], [110, 0, -80]]] },
+  { key: 'citymart-in', name: 'CityMart (inside)', blurb: 'Drive through the vestibule glass and you are in a Super-centre: checkouts, an action alley of soda towers and pumpkin bins, grocery aisles, reach-in freezers, a TV wall. Everything loose goes flying; shelves shed their stock.', cams: [[[90, 2.4, -101], [92, 1.6, -130]], [[150, 6.5, -100], [130, 1, -140]], [[66, 2.2, -112], [80, 1.2, -132]]] },
   { key: 'parkway', name: 'Maple Parkway', blurb: 'The road that ties it together: four lanes, a double yellow, autumn street trees and a signal at every place you might want to turn.', cams: [[[-60, 2, 4], [40, 2, -2]], [[-150, 6, 12], [-110, 1, -8]]] },
 ];

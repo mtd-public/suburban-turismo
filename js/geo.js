@@ -14,12 +14,15 @@ export const OFF2 = { polygonOffset: true, polygonOffsetFactor: -2, polygonOffse
 // mats: one material or six (+x, −x, +y, −y, +z, −z, three.js order). tile: number, null (0..1 per face) or
 // a per-face array.
 export function tbox(w, h, d, mats, tile = 2) {
-  const g = new THREE.BoxGeometry(w, h, d);
+  // long faces are split every ~4 m, like the ground, so the affine warp on a 26 m shelf or a 120 m wall stays a wobble
+  const n = (v) => Math.max(1, Math.round(v / 4)), sw = n(w), sh = n(h), sd = n(d);
+  const g = new THREE.BoxGeometry(w, h, d, sw, sh, sd);
   const uv = g.attributes.uv, dims = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]];
-  for (let f = 0; f < 6; f++) {
+  const verts = [[sd, sh], [sd, sh], [sw, sd], [sw, sd], [sw, sh], [sw, sh]].map(([a, b]) => (a + 1) * (b + 1));
+  for (let f = 0, i0 = 0; f < 6; i0 += verts[f++]) {
     const t = Array.isArray(tile) ? tile[f] : tile;
     if (!t) continue;
-    for (let k = 0; k < 4; k++) { const i = f * 4 + k; uv.setXY(i, uv.getX(i) * dims[f][0] / t, uv.getY(i) * dims[f][1] / t); }
+    for (let i = i0; i < i0 + verts[f]; i++) uv.setXY(i, uv.getX(i) * dims[f][0] / t, uv.getY(i) * dims[f][1] / t);
   }
   return new THREE.Mesh(g, mats);
 }

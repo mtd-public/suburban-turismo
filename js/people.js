@@ -265,7 +265,7 @@ export function buildPerson(key) {
   J.spine = joint(J.hips, 0, 0.02, 0);
   const wrapM = lam(0xffffff, torsoWrap(C));
   part(round(0.33 * W * S, 0.52, 0.21 * W, 0.42 * W * S, 0.23 * W, false, 8), [wrapM, topM, topM], J.spine);
-  part(new THREE.SphereGeometry(0.5, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.42 * W * S, 0.1, 0.23 * W), topM, J.spine, 0, 0.5, 0); // shoulders
+  part(new THREE.SphereGeometry(0.5, 10, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.43 * W * S, 0.2, 0.235 * W), topM, J.spine, 0, 0.5, 0); // the shoulder line: a dome that slopes from the neck into the arms
   if (C.top.kind === 'vest') part(round(0.37, 0.5, 0.25, 0.45, 0.27, false, 8), [wrapM, topM, topM], J.spine, 0, 0.01, 0); // the puffer's bulk
   part(round(0.1, 0.1, 0.1, 0.09, 0.09), skin, J.spine, 0, 0.5, 0);
   J.head = joint(J.spine, 0, 0.58, 0.01);
@@ -274,10 +274,11 @@ export function buildPerson(key) {
   for (const s of [1, -1]) part(new THREE.BoxGeometry(0.02, 0.06, 0.04), skin, J.head, s * 0.095, 0.12, -0.01); // ears
   hairShell(C, J.head, hairM, part);
   for (const s of [1, -1]) {
-    const sh = joint(J.spine, s * 0.24 * W * S, 0.48, 0), el = joint(sh, 0, -0.3, 0), wr = joint(el, 0, -0.26, 0);
+    const sh = joint(J.spine, s * 0.2 * W * S, 0.49, 0), el = joint(sh, 0, -0.3, 0), wr = joint(el, 0, -0.26, 0);
     el.rotation.order = 'YXZ'; // (bend first, then swing the forearm round the upper arm: crossed arms, a held clipboard)
     const longSleeve = ['vest', 'zip', 'track', 'greeter'].includes(C.top.kind);
-    part(round(0.1 * W, 0.3, 0.1 * W, 0.11 * W, 0.11 * W, true), C.top.kind === 'vest' ? sleeveM : sleeveM, sh);
+    part(new THREE.SphereGeometry(0.5, 8, 6).scale(0.13 * W, 0.15, 0.135 * W), sleeveM, sh, s * 0.01, -0.03, 0); // deltoid: rounds the joint into the torso
+    part(round(0.1 * W, 0.3, 0.1 * W, 0.12 * W, 0.12 * W, true), sleeveM, sh, 0, -0.02, 0);
     part(round(0.08 * W, 0.26, 0.08 * W, 0.09 * W, 0.09 * W, true), longSleeve ? sleeveM : skin, el);
     part(round(0.08, 0.11, 0.045, 0.06, 0.035, true), skin, wr, 0, 0.01, 0);
     J[s > 0 ? 'lSh' : 'rSh'] = sh; J[s > 0 ? 'lEl' : 'rEl'] = el; J[s > 0 ? 'lWr' : 'rWr'] = wr;

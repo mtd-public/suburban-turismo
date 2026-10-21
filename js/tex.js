@@ -375,3 +375,73 @@ export const treeline = () => once('treeline', () => canvasTex(512, 64, (g, w, h
   grain(g, w, h, 8, 0.05, 362);
   const d = g.getImageData(0, 0, w, h); for (let i = 3; i < d.data.length; i += 4) d.data[i] = d.data[i] > 128 ? 255 : 0; g.putImageData(d, 0, 0);
 }));
+
+// ---------------------------------------------------------------- inside CityMart
+// Gondola shelving faces: four shelves of stock with price-tag strips. kind: grocery | gm | toys | paper.
+export const shelfStock = (kind = 'grocery') => once(`stock${kind}`, () => canvasTex(64, 64, (g, w, h) => {
+  const rnd = mulberry32(kind.length * 97);
+  g.fillStyle = css([150, 152, 154]); g.fillRect(0, 0, w, h); // the pegboard back
+  for (let s = 0; s < 4; s++) {
+    const y0 = 2 + s * 15;
+    let x = 0;
+    while (x < w) { // facings: runs of the same product, then the next
+      const pw = kind === 'paper' ? 10 : 3 + (rnd() * 4 | 0), run = 1 + (rnd() * 4 | 0), ph = 7 + (rnd() * 5 | 0);
+      const c = kind === 'toys' ? [[230, 60, 130], [60, 90, 216], [242, 200, 60], [60, 180, 90]][rnd() * 4 | 0] : kind === 'paper' ? [[236, 236, 230], [210, 220, 236]][rnd() * 2 | 0] : kind === 'gm' ? [[200, 200, 196], [60, 60, 64], [190, 60, 50], [70, 110, 170]][rnd() * 4 | 0] : [[200, 60, 40], [230, 180, 50], [240, 236, 220], [60, 120, 60], [140, 70, 30], [40, 80, 160]][rnd() * 6 | 0];
+      for (let k = 0; k < run && x < w; k++, x += pw) {
+        g.fillStyle = css(c); g.fillRect(x, y0 + 12 - ph, pw - 1, ph);
+        g.fillStyle = css(mix(c, [255, 255, 255], 0.45)); g.fillRect(x, y0 + 12 - ph + 2, pw - 1, 1);
+      }
+    }
+    g.fillStyle = css([210, 212, 214]); g.fillRect(0, y0 + 12, w, 2); // the shelf lip
+    g.fillStyle = css([242, 210, 60]); for (let x2 = 3; x2 < w; x2 += 11) g.fillRect(x2, y0 + 12, 4, 2); // price tags
+  }
+  grain(g, w, h, 10, 0.08, 401);
+}));
+// Reach-in freezer doors: aluminium frames, glass, lit shelves of cartons behind.
+export const fridgeDoors = () => once('fridge', () => canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = css([190, 196, 200]); g.fillRect(0, 0, w, h);
+  const rnd = mulberry32(411);
+  for (let d = 0; d < 2; d++) {
+    const x0 = 3 + d * 31;
+    g.fillStyle = css([210, 230, 240]); g.fillRect(x0, 8, 27, 54);
+    for (let s = 0; s < 5; s++) for (let x = x0 + 1; x < x0 + 26; x += 3) { g.fillStyle = css([[230, 230, 236], [200, 60, 50], [60, 100, 180], [240, 200, 80]][rnd() * 4 | 0]); g.fillRect(x, 10 + s * 10, 2, 7); }
+    g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(x0 + 4, 8, 3, 54); g.fillStyle = css([150, 154, 158]); g.fillRect(x0 + 24, 30, 2, 12); // glare, handle
+  }
+  g.fillStyle = css([30, 60, 120]); g.fillRect(0, 0, w, 7); g.fillStyle = '#f2f2ee'; g.font = 'bold 6px Arial'; g.fillText('FROZEN', 20, 6);
+  grain(g, w, h, 8, 0.06, 412);
+}));
+// Polished VCT floor tiles with the odd darker tile and scuffs.
+export const storeFloor = () => once('sfloor', () => canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = css([208, 206, 198]); g.fillRect(0, 0, w, h);
+  const rnd = mulberry32(421);
+  for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (rnd() < 0.15) { g.fillStyle = css([180, 182, 178]); g.fillRect(x * 16, y * 16, 16, 16); }
+  g.fillStyle = 'rgba(120,118,110,0.5)'; for (let k = 0; k < 64; k += 16) { g.fillRect(k, 0, 1, h); g.fillRect(0, k, w, 1); }
+  g.fillStyle = 'rgba(255,255,255,0.25)'; g.fillRect(10, 20, 30, 2); // the shine of the lights
+  grain(g, w, h, 8, 0.1, 422);
+}));
+export const storeWall = () => once('swall', () => canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = css([226, 224, 216]); g.fillRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 8) { g.fillStyle = 'rgba(0,0,0,0.08)'; g.fillRect(0, y, w, 1); for (let x = (y / 8 % 2) * 8; x < w; x += 16) g.fillRect(x, y, 1, 8); } // painted block
+  g.fillStyle = css([42, 90, 168]); g.fillRect(0, 50, w, 6); // the blue stripe at cart height
+  grain(g, w, h, 8, 0.1, 431); grimeBottom(g, w, h, 0.15, 0.25);
+}));
+export const ceiling = () => once('ceil', () => canvasTex(64, 64, (g, w, h) => {
+  g.fillStyle = css([150, 150, 148]); g.fillRect(0, 0, w, h);
+  g.fillStyle = css([164, 164, 160]); for (let x = 0; x < w; x += 8) g.fillRect(x, 0, 2, h); // corrugated deck
+  g.fillStyle = css([92, 92, 96]); g.fillRect(0, 30, w, 3); // a joist
+  grain(g, w, h, 10, 0.1, 441);
+}));
+// The electronics wall: rows of TVs all showing the same bright picture.
+export const tvWall = () => once('tvwall', () => canvasTex(64, 32, (g, w, h) => {
+  g.fillStyle = css([30, 30, 34]); g.fillRect(0, 0, w, h);
+  for (let r = 0; r < 2; r++) for (let k = 0; k < 4; k++) {
+    const x = 2 + k * 16, y = 2 + r * 15;
+    g.fillStyle = '#111'; g.fillRect(x, y, 14, 12);
+    const gr = g.createLinearGradient(0, y + 1, 0, y + 11); gr.addColorStop(0, '#6ab8f0'); gr.addColorStop(0.6, '#58a04a'); gr.addColorStop(1, '#2a6a2a');
+    g.fillStyle = gr; g.fillRect(x + 1, y + 1, 12, 9); g.fillStyle = '#f2f2ee'; g.fillRect(x + 8, y + 3, 3, 2);
+  }
+}, { repeat: true }));
+export const checkout = () => once('checkout', () => canvasTex(32, 16, (g, w, h) => {
+  g.fillStyle = css([220, 218, 210]); g.fillRect(0, 0, w, h); g.fillStyle = css([42, 90, 168]); g.fillRect(0, 0, w, 3); g.fillStyle = css([30, 30, 32]); g.fillRect(0, h - 2, w, 2);
+  grain(g, w, h, 8, 0.1, 451);
+}));

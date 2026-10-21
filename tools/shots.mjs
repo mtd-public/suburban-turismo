@@ -36,6 +36,20 @@ if (want('drive')) {
   await p.keyboard.down('KeyW'); await p.keyboard.down('KeyA'); await p.evaluate(() => { for (let i = 0; i < 70; i++) ART.tick(1 / 60); }); await p.keyboard.up('KeyA'); await p.keyboard.up('KeyW');
   await shot(p, 'drive-1');
 }
+if (want('smash')) {
+  // Through CityMart's left vestibule glass and down the main aisle; props must react and glass must break.
+  await p.evaluate(() => { ART.set('drive', 0); ART.warp(); });
+  await p.keyboard.down('KeyW');
+  for (let k = 0; k < 6; k++) { await p.evaluate(() => { for (let i = 0; i < 40; i++) ART.tick(1 / 60); }); await shot(p, `smash-${k}`); }
+  // and side-on into a grocery shelf: the stock should come off it
+  await p.evaluate(() => { Object.assign(ART.body, { x: 87.5, z: -128, heading: Math.PI / 2, vh: Math.PI / 2, speed: 12 }); for (let i = 0; i < 20; i++) ART.tick(1 / 60); });
+  await p.keyboard.up('KeyW');
+  await p.evaluate(() => { for (let i = 0; i < 30; i++) ART.tick(1 / 60); });
+  await shot(p, 'smash-6');
+  const fx = await p.evaluate(() => ({ ...ART.props.fx, z: ART.body.z, x: ART.body.x }));
+  console.log('   fx', JSON.stringify(fx));
+  if (!fx.smashed) errors.push('no glass smashed');
+}
 if (want('misc')) {
   for (const l of ['golden', 'overcast', 'dusk']) { await p.evaluate((l) => { ART.applyLight(l); ART.set('tour', 0, 0); }, l); await shot(p, `light-${l}`); }
   await p.evaluate(() => ART.applyLight('autumn'));

@@ -69,7 +69,7 @@ Parked traffic reuses the same models in a limited palette of realistic period c
 
 ## 5. People (`js/people.js`)
 
-Fifteen rounded parts on a joint tree (8-sided trunk, 6-sided limbs, a sphere head with a wrap-around face texture, hair caps), realistic proportions, painted faces (32×40), clothes with
+Seventeen rounded parts on a joint tree (8-sided trunk, 6-sided limbs, a sphere head with a wrap-around face texture, hair caps, a domed shoulder line and deltoids so the arms grow out of the torso instead of hanging off a shelf), realistic proportions, painted faces (32×40), clothes with
 collars, plackets, quilting, name tags. Character comes from **silhouette props + pose**: Karen's inverted bob,
 sunglasses parked on her head, phone to the ear and the other hand jabbing at you; Harold's bucket hat, clipboard
 and socks-with-sandals; the Joneses' matching smugness. Poses are procedural and loop (idle, gesture, power-walk).
@@ -93,25 +93,47 @@ One stretch of Maple Parkway with a sample of each location along it:
 - **The Promenade at Maple Creek** — the outdoor mall: colonnade, awnings, parody storefronts (Bed, Bath &
   Bewildered; The Gap Year; Aberdeen & Finch…), a fountain plaza, planter trees.
 - **CityMart** — a tilt-up box the size of a county, two vestibules, the big sign, a lot with light poles, cart
-  corrals and islands, a garden centre behind chain-link, a propane cage and a BLOCKBOX kiosk.
+  corrals and islands, a garden centre behind chain-link, a propane cage and a BLOCKBOX kiosk. Nobody parks in
+  front of the doors, so there's a straight run from the road to the glass.
+- **CityMart (inside)** — drive through either vestibule's glass into a Super-centre: numbered checkouts across
+  the front, an action alley of soda towers and pumpkin bins, produce, six grocery aisles, reach-in freezers down
+  the west and back walls, toy and home aisles, apparel rounders with mannequins, a TV wall that all shows the same
+  picture, pharmacy at the back, hanging blue department signs, rows of fluorescent fixtures under a corrugated deck.
 - Between them: autumn woods, and a painted treeline ring on the horizon (with the water tower).
 
-## 7. HUD
+## 7. Things you can hit (`js/props.js`)
+
+Crashes are a reaction, not a simulation: every loose prop is one rigid body with a cheap impulse, gravity, spin and
+a bounce off walls, then it settles where it lands.
+
+- **Loose props:** shopping carts, wheelie bins, cones, pumpkins, leaf bags, news boxes, cardboard boxes, soda
+  towers, produce bins, mannequins. Hit them and they fly, tumble and roll to a stop (weight decides how far: a
+  pumpkin goes further than a bin).
+- **Glass:** the vestibule panes shatter into shards (with a *SMASH!*) when you hit them above a walking pace; below
+  that they're a wall.
+- **Shelves:** crash into a gondola and its stock comes off the shelf in a spray of products.
+- `R` puts everything back.
+
+The pedestrian ragdolls (phase 2) will use the same impulse code on the rig's joints.
+
+## 8. HUD
 
 Driver's: big yellow serif labels over thin bordered bars (**Damage**, **HOA Complaints** — drive on a verge and
 watch it climb), a wireframe minimap in a blue frame, tyre smoke when you slide. Menus are dark translucent slabs
 with a hairline gold border, Georgia serif.
 
-## 8. Reuse from the family
+## 9. Reuse from the family
 
 - `js/drive.js`, `js/world.js`, `js/utils.js`, `js/input.js`, `js/tuning.js` — store-smash's controller (itself
   Dr. Mow's mower step): the same body code drives all five vehicles with per-vehicle handling numbers.
 - `touch-zoom-guard/` — the template kit.
 - three.js r160 vendored, import map, no build step (Dr. Mow / store-smash convention).
 
-## 9. Style review: decisions
+## 10. Style review: decisions
 
 1. ~~PS1 dose~~ — decided: 240p with full wobble (the defaults below).
 2. ~~Time of day~~ — decided: Autumn afternoon by default, Golden hour as an option.
 3. ~~People~~ — decided: rounder (8-sided trunks, 6-sided limbs, sphere heads with wrap textures, hair caps).
 4. ~~Car paint~~ — decided: realistic period colours.
+5. ~~Shoulders~~ — decided: rounded and fitted to the torso.
+6. CityMart is drivable inside, through glass you can smash; props react to crashes.

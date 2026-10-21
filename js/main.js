@@ -12,10 +12,12 @@ import { FOLIAGE } from './geo.js';
 import { buildTown, LOCATIONS } from './town.js';
 import { buildVehicle, poseVehicle, VEHICLES, VEHICLE_ORDER } from './cars.js';
 import { buildPerson, posePerson, CAST, CAST_ORDER } from './people.js';
-import { createWorld, groundAt } from './world.js';
+import { createWorld, groundAt, platsNear, contains } from './world.js';
 import { createBody, driveStep } from './drive.js';
 import { HANDLING, DT } from './tuning.js';
 import { Input } from './input.js';
+import { Props } from './props.js';
+import { wallAt } from './world.js';
 import { clamp, damp, lerp } from './utils.js';
 
 const $ = (s) => document.querySelector(s);
@@ -56,7 +58,14 @@ function applyLight(k) {
   document.querySelectorAll('[data-light]').forEach((b) => b.classList.toggle('on', b.dataset.light === k));
 }
 
-const W = createWorld({ plats: town.plats, posts: [...town.posts] });
+const W = createWorld({ plats: [...town.plats, ...town.glass.map((g) => g.plat)], posts: [...town.posts] });
+// things to hit: loose props, the CityMart glass, shelf stock
+const props = new Props(scene, W);
+for (const [k, x, z, ry] of town.dyn) props.spawn(k, x, z, ry ?? 0);
+for (const g of town.glass) { scene.add(g.mesh); props.addGlass(g.mesh, g.plat); }
+props.onEvent = (type) => { if (type === 'glass') { hud.damage = Math.min(1, hud.damage + 0.05); flash('SMASH!'); } };
+let flashT = 0;
+function flash(t) { const el = $('#flash'); if (!el) return; el.textContent = t; el.classList.add('on'); flashT = 0.9; }
 const people = {};
 for (const k of CAST_ORDER) {
   if (k === 'dale') continue; // (Dale rides his Segway)
@@ -103,6 +112,7 @@ function setMode(m) {
   input.enabled = m === 'drive';
   if (m === 'garage' || m === 'drive') setVehicle(vi);
   else if (car) { scene.remove(car); car = null; }
+  if (m !== 'drive') props.reset();
   if (m === 'drive') { Object.assign(body, { x: -60, y: 0, z: 3.5, heading: Math.PI / 2, vh: Math.PI / 2, speed: 0, vy: 0, grounded: true }); hud.damage = 0; hud.complaints = 0; camState.init = false; }
   caption();
 }
@@ -112,10 +122,11 @@ function step(d) {
   else if (mode === 'cast') ci = (ci + d + CAST_ORDER.length) % CAST_ORDER.length;
   modeT = 0; caption();
 }
+function warp() { Object.assign(body, { x: 90, y: 0, z: -40, heading: Math.PI, vh: Math.PI, speed: 0, vy: 0, grounded: true }); camState.init = false; }
 function caption() {
   let title = '', sub = '', blurb = '';
   if (mode === 'tour') { const L = LOCATIONS[li]; title = L.name; sub = `Location ${li + 1} of ${LOCATIONS.length} · view ${camI + 1}/${L.cams.length}`; blurb = L.blurb; }
-  else if (mode === 'garage' || mode === 'drive') { const S = VEHICLES[VEHICLE_ORDER[vi]]; title = S.name; sub = `${S.kind}${mode === 'drive' ? ' · driving' : ''}`; blurb = mode === 'drive' ? 'WASD / arrows or the stick to drive, Space to hop, ◀ ▶ to swap vehicles. Drive on a lawn and watch the HOA meter.' : S.blurb; }
+  else if (mode === 'garage' || mode === 'drive') { const S = VEHICLES[VEHICLE_ORDER[vi]]; title = S.name; sub = `${S.kind}${mode === 'drive' ? ' · driving' : ''}`; blurb = mode === 'drive' ? 'WASD / arrows or the stick to drive, Space to hop, ◀ ▶ to swap vehicles, G to jump to the CityMart lot, R to put everything back. The CityMart doors are glass.' : S.blurb; }
   else if (mode === 'cast') { const C = CAST[CAST_ORDER[ci]]; title = C.name; sub = C.title; blurb = C.blurb; }
   $('#cap-title').textContent = title; $('#cap-sub').textContent = sub; $('#cap-blurb').textContent = blurb;
 }
@@ -142,6 +153,11 @@ function cameraFor(dt) {
     const S = VEHICLES[VEHICLE_ORDER[vi]], back = S.segway ? 3.6 : 6.5, up = S.segway ? 2.0 : 2.3;
     const fx = Math.sin(body.heading), fz = Math.cos(body.heading);
     tmp.set(body.x - fx * back, body.y + up, body.z - fz * back);
+    // pull in rather than sit inside a shelf or a wall (the store aisles are narrow)
+    for (let k = 0.15; k <= 1.001; k += 0.05) {
+      const x = body.x - fx * back * k, z = body.z - fz * back * k, y = body.y + 1.2 + (up - 1.2) * k;
+      if (platsNear(W, x, z).some((p) => !p.ghost && contains(p, x, z, 0.4) && p.bot < y && p.top > y - 0.3)) { tmp.set(body.x - fx * back * (k - 0.05), body.y + 1.2 + (up - 1.2) * (k - 0.05), body.z - fz * back * (k - 0.05)); camState.pos.x = damp(camState.pos.x, tmp.x, 30, dt); camState.pos.z = damp(camState.pos.z, tmp.z, 30, dt); break; }
+    }
     if (!camState.init) { camState.pos.copy(tmp); camState.init = true; }
     camState.pos.x = damp(camState.pos.x, tmp.x, 6, dt); camState.pos.z = damp(camState.pos.z, tmp.z, 6, dt); camState.pos.y = damp(camState.pos.y, tmp.y, 4, dt);
     cam.position.copy(camState.pos); cam.lookAt(body.x + fx * 4, body.y + 1.0, body.z + fz * 4); cam.fov = 60 + clamp(body.speed, 0, 25) * 0.4;
@@ -174,7 +190,9 @@ function tick(dt) {
     const inp = input.read()[0], d = inp.dir;
     const ctl = d ? { turn: Math.abs(d.x) > 0.15 ? d.x : 0, throttle: d.y < -0.2 ? 1 : d.y > 0.3 ? -1 : (d.mag > 0.2 && !inp.keys ? 0.6 : 0), jump: inp.jump } : { turn: 0, throttle: 0, jump: inp.jump };
     acc += dt; ev.length = 0;
+    props.collide(body, dt);
     while (acc >= DT) { driveStep(W, body, ctl, DT, ev); acc -= DT; }
+    for (const e of ev) if (e.type === 'crash') { const fx = Math.sin(body.heading), fz = Math.cos(body.heading), L = VEHICLES[VEHICLE_ORDER[vi]].len / 2 + 0.6, hit = wallAt(W, body.x + fx * L, body.z + fz * L, body.y, 0.8, 0.4, 1.6); if (hit?.shelf) props.spill(body.x + fx * L, body.y, body.z + fz * L, fx, fz, e.v); }
     for (const e of ev) if (e.type === 'crash' || e.type === 'scrape') hud.damage = Math.min(1, hud.damage + (e.type === 'crash' ? 0.06 : 0.01) * (e.v / 10));
     car.position.set(body.x, body.y, body.z); car.rotation.y = body.heading; poseVehicle(car, body, dt);
     // drifting smoke, and the HOA meter (anything green under the wheels)
@@ -183,7 +201,9 @@ function tick(dt) {
     hud.damage = Math.max(0, hud.damage - dt * 0.002);
     drawHud();
   } else if (mode === 'garage' && car) { poseVehicle(car, { speed: 0, steer: 0 }, dt); }
+  props.step(dt);
   tickPuffs(dt);
+  if (flashT > 0 && (flashT -= dt) <= 0) $('#flash')?.classList.remove('on');
   cameraFor(dt);
   skyDome.position.copy(cam.position);
 }
@@ -218,6 +238,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'BracketLeft' || e.code === 'KeyB' || (mode !== 'drive' && e.code === 'ArrowLeft')) step(-1);
   if (e.code === 'Digit1') setMode('tour'); if (e.code === 'Digit2') setMode('garage'); if (e.code === 'Digit3') setMode('cast'); if (e.code === 'Digit4') setMode('drive');
   if (e.code === 'KeyP') $('#panel').classList.toggle('open');
+  if (e.code === 'KeyR' && mode === 'drive') props.reset();
+  if (e.code === 'KeyG' && mode === 'drive') warp();
 });
 function resize() { const w = innerWidth, h = innerHeight; R.resize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
 addEventListener('resize', resize);
@@ -230,4 +252,4 @@ $('#loading')?.remove();
 requestAnimationFrame(frame);
 
 // For the screenshot tool and the console.
-window.ART = { setMode, step, applyLight, tick, render: () => R.render(scene, cam), PS1, body, get mode() { return mode; }, set: (m, i, c = 0) => { setMode(m); if (m === 'tour') { li = i; camI = c; } else if (m === 'cast') ci = i; else { setVehicle(i); } modeT = 2; caption(); }, scene };
+window.ART = { setMode, step, applyLight, tick, render: () => R.render(scene, cam), PS1, body, props, get mode() { return mode; }, warp, set: (m, i, c = 0) => { setMode(m); if (m === 'tour') { li = i; camI = c; } else if (m === 'cast') ci = i; else { setVehicle(i); } modeT = 2; caption(); }, scene };

@@ -53,3 +53,7 @@ body.noui #tabs, body.noui #caption, body.noui #panel { display: none !important
   .bar label { font-size: 16px; }
   body[data-mode=drive] #minimap { width: 100px; height: 100px; bottom: 140px; }
 }
+
+/* a Driver-style banner for big moments (glass going through) */
+#flash { position: fixed; left: 0; right: 0; top: 34%; text-align: center; font: bold 44px Georgia, serif; color: var(--gold); text-shadow: 3px 3px 0 #000; opacity: 0; transform: scale(0.8); transition: opacity 0.15s, transform 0.15s; pointer-events: none; z-index: 2; }
+#flash.on { opacity: 1; transform: none; }
