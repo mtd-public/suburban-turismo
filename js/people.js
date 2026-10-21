@@ -194,6 +194,45 @@ function tbox(w, h, d, tw = w, td = d, down = false) {
   return g;
 }
 
+// Rounded limb / torso: a tapered prism (8 sides for the trunk, 6 for limbs) squashed to an ellipse, with smooth
+// normals so Gouraud shading rounds it off (how Gran Turismo 2-era drivers and MGS's later models read as round).
+function round(w, h, d, tw = w, td = d, down = false, sides = 6) {
+  const g = new THREE.CylinderGeometry(tw / 2, w / 2, h, sides, 1, false, -Math.PI, Math.PI * 2); // (front, +z, at u = 0.5)
+  g.scale(1, 1, ((d + td) / 2) / ((w + tw) / 2));
+  g.translate(0, h / 2, 0);
+  if (down) { g.rotateX(Math.PI); g.rotateY(Math.PI); }
+  return g;
+}
+// The torso wraps one texture round the prism: the shirt front painted across the middle half, plain fabric behind.
+function torsoWrap(C) {
+  return tc(`wrap${C.name}`, () => canvasTex(64, 32, (g, w, h) => {
+    g.drawImage(fabric(C.top.color, 1).image, 0, 0, w, h);
+    g.drawImage(topFrontTex(C).image, 16, 0, 32, 32);
+    if (C.top.kind === 'apron' || C.top.kind === 'greeter') { g.fillStyle = css(hexA(C.top.apron ?? C.top.vest)); if (C.top.kind === 'apron') g.fillRect(31, 26, 2, 6); else { g.fillRect(0, 0, 16, h); g.fillRect(48, 0, 16, h); } }
+  }, { repeat: false }));
+}
+// The head: a low sphere with the face across the front, side texture by the ears, back texture behind.
+function headWrap(C) {
+  return tc(`hwrap${C.name}`, () => canvasTex(64, 32, (g, w, h) => {
+    const back = headTex(C, 'back').image, side = headTex(C, 'side').image;
+    g.drawImage(back, 0, 0, 12, h); g.drawImage(back, 52, 0, 12, h);
+    g.drawImage(side, 12, 0, 8, h); g.drawImage(side, 44, 0, 8, h);
+    g.drawImage(faceTex(C).image, 18, 3, 28, 28);
+    g.fillStyle = css(hexA(C.hair.style === 'bald' ? C.skin : C.hair.color)); g.fillRect(0, 0, w, 3);
+  }, { repeat: false }));
+}
+function headGeo() {
+  const g = new THREE.SphereGeometry(0.5, 10, 7, -Math.PI / 2); // (front, +z, at u = 0.5)
+  g.scale(0.19, 0.25, 0.215); g.translate(0, 0.125, 0);
+  return g;
+}
+// A hair cap: part of a sphere round the head, open at the face (gap, radians) and down to `down` (0..1 of the head).
+function cap(gap, down, grow = 1.08) {
+  const g = new THREE.SphereGeometry(0.5, 10, 6, Math.PI / 2 + gap / 2, Math.PI * 2 - gap, 0, Math.PI * down);
+  g.scale(0.19 * grow, 0.25 * grow, 0.215 * grow); g.translate(0, 0.125, -0.004);
+  return g;
+}
+
 // ------------------------------------------------------------------ the rig
 export function buildPerson(key) {
   const C = CAST[key];
@@ -209,36 +248,38 @@ export function buildPerson(key) {
 
   // hips and legs
   J.hips = joint(fig, 0, 0.94, 0);
-  part(tbox(0.34 * W, 0.18, 0.21 * W, 0.32 * W, 0.2 * W), botM, J.hips, 0, -0.1, 0);
+  part(round(0.34 * W, 0.18, 0.21 * W, 0.32 * W, 0.2 * W, false, 8), botM, J.hips, 0, -0.1, 0);
   const shinM = lam(0xffffff, shinTex(C)), bare = C.bottom.kind === 'shorts' || C.bottom.kind === 'skirt';
   for (const s of [1, -1]) {
     const hip = joint(J.hips, s * 0.09 * W, -0.06, 0), knee = joint(hip, 0, -0.44, 0), ankle = joint(knee, 0, -0.42, 0);
-    if (C.bottom.kind === 'shorts') { part(tbox(0.16 * W, 0.26, 0.17 * W, 0.14 * W, 0.16 * W, true), botM, hip); part(tbox(0.12 * S, 0.2, 0.13, 0.11, 0.12, true), skin, hip, 0, -0.24, 0); }
-    else if (C.bottom.kind === 'skirt') part(tbox(0.13 * S, 0.44, 0.14, 0.11, 0.12, true), skin, hip);
-    else part(tbox(0.15 * W * S, 0.44, 0.16 * W, 0.12 * S, 0.13, true), botM, hip);
-    part(tbox(0.11 * S, 0.42, 0.12, 0.08, 0.09, true), bare ? shinM : (C.bottom.kind === 'leggings' ? botM : shinM), knee);
+    if (C.bottom.kind === 'shorts') { part(round(0.16 * W, 0.26, 0.17 * W, 0.14 * W, 0.16 * W, true), botM, hip); part(round(0.12 * S, 0.2, 0.13, 0.11, 0.12, true), skin, hip, 0, -0.24, 0); }
+    else if (C.bottom.kind === 'skirt') part(round(0.13 * S, 0.44, 0.14, 0.11, 0.12, true), skin, hip);
+    else part(round(0.15 * W * S, 0.44, 0.16 * W, 0.12 * S, 0.13, true), botM, hip);
+    part(round(0.11 * S, 0.42, 0.12, 0.08, 0.09, true), bare ? shinM : (C.bottom.kind === 'leggings' ? botM : shinM), knee);
     part(new THREE.BoxGeometry(0.1, 0.08, 0.25), shoeM, ankle, 0, -0.03, 0.05);
     J[s > 0 ? 'lHip' : 'rHip'] = hip; J[s > 0 ? 'lKnee' : 'rKnee'] = knee;
   }
-  if (C.bottom.kind === 'skirt') part(tbox(0.44, 0.3, 0.32, 0.34, 0.22, true), botM, J.hips, 0, -0.04, 0);
+  if (C.bottom.kind === 'skirt') part(round(0.38, 0.3, 0.28, 0.34, 0.22, true, 8), botM, J.hips, 0, -0.04, 0);
 
   // torso, head, arms
   J.spine = joint(J.hips, 0, 0.02, 0);
-  const front = lam(0xffffff, topFrontTex(C));
-  part(tbox(0.33 * W * S, 0.52, 0.21 * W, 0.42 * W * S, 0.23 * W), [topM, topM, topM, topM, front, topM], J.spine);
-  if (C.top.kind === 'vest') part(tbox(0.36, 0.5, 0.24, 0.44, 0.26), [topM, topM, topM, topM, front, topM], J.spine, 0, 0.01, 0); // the puffer's bulk
-  part(new THREE.BoxGeometry(0.09, 0.08, 0.09), skin, J.spine, 0, 0.55, 0);
+  const wrapM = lam(0xffffff, torsoWrap(C));
+  part(round(0.33 * W * S, 0.52, 0.21 * W, 0.42 * W * S, 0.23 * W, false, 8), [wrapM, topM, topM], J.spine);
+  part(new THREE.SphereGeometry(0.5, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2).scale(0.42 * W * S, 0.1, 0.23 * W), topM, J.spine, 0, 0.5, 0); // shoulders
+  if (C.top.kind === 'vest') part(round(0.37, 0.5, 0.25, 0.45, 0.27, false, 8), [wrapM, topM, topM], J.spine, 0, 0.01, 0); // the puffer's bulk
+  part(round(0.1, 0.1, 0.1, 0.09, 0.09), skin, J.spine, 0, 0.5, 0);
   J.head = joint(J.spine, 0, 0.58, 0.01);
-  const sideM = lam(0xffffff, headTex(C, 'side')), backM = lam(0xffffff, headTex(C, 'back')), hairM = lam(0xffffff, hairTex(C));
-  part(tbox(0.18, 0.25, 0.21, 0.19, 0.22), [sideM, sideM, hairM, skin, lam(0xffffff, faceTex(C)), backM], J.head);
+  const hairM = lam(0xffffff, hairTex(C));
+  part(headGeo(), lam(0xffffff, headWrap(C)), J.head);
+  for (const s of [1, -1]) part(new THREE.BoxGeometry(0.02, 0.06, 0.04), skin, J.head, s * 0.095, 0.12, -0.01); // ears
   hairShell(C, J.head, hairM, part);
   for (const s of [1, -1]) {
     const sh = joint(J.spine, s * 0.24 * W * S, 0.48, 0), el = joint(sh, 0, -0.3, 0), wr = joint(el, 0, -0.26, 0);
     el.rotation.order = 'YXZ'; // (bend first, then swing the forearm round the upper arm: crossed arms, a held clipboard)
     const longSleeve = ['vest', 'zip', 'track', 'greeter'].includes(C.top.kind);
-    part(tbox(0.1 * W, 0.3, 0.1 * W, 0.11 * W, 0.11 * W, true), C.top.kind === 'vest' ? sleeveM : sleeveM, sh);
-    part(tbox(0.08 * W, 0.26, 0.08 * W, 0.09 * W, 0.09 * W, true), longSleeve ? sleeveM : skin, el);
-    part(new THREE.BoxGeometry(0.07, 0.1, 0.04), skin, wr, 0, -0.04, 0);
+    part(round(0.1 * W, 0.3, 0.1 * W, 0.11 * W, 0.11 * W, true), C.top.kind === 'vest' ? sleeveM : sleeveM, sh);
+    part(round(0.08 * W, 0.26, 0.08 * W, 0.09 * W, 0.09 * W, true), longSleeve ? sleeveM : skin, el);
+    part(round(0.08, 0.11, 0.045, 0.06, 0.035, true), skin, wr, 0, 0.01, 0);
     J[s > 0 ? 'lSh' : 'rSh'] = sh; J[s > 0 ? 'lEl' : 'rEl'] = el; J[s > 0 ? 'lWr' : 'rWr'] = wr;
   }
   props(C, J, part);
@@ -250,27 +291,27 @@ export function buildPerson(key) {
 
 function hairShell(C, head, hairM, part) {
   const st = C.hair.style;
-  if (st === 'bob') { // the inverted bob: long at the front, stacked at the back, side-swept
-    part(tbox(0.215, 0.22, 0.2, 0.2, 0.22), hairM, head, 0, 0.06, -0.025);
-    part(new THREE.BoxGeometry(0.03, 0.2, 0.12), hairM, head, -0.105, 0.06, 0.06);
-    part(new THREE.BoxGeometry(0.03, 0.17, 0.1), hairM, head, 0.105, 0.09, 0.06);
+  if (st === 'bob') { // the inverted bob: a cap open at the face, longer at the front, side-swept
+    part(cap(1.5, 0.72, 1.12), hairM, head);
+    part(round(0.035, 0.16, 0.1, 0.03, 0.08, true), hairM, head, -0.1, 0.16, 0.05).rotation.z = 0.12;
+    part(round(0.035, 0.13, 0.09, 0.03, 0.07, true), hairM, head, 0.1, 0.18, 0.05).rotation.z = -0.12;
   } else if (st === 'pony') {
-    part(tbox(0.2, 0.08, 0.23, 0.17, 0.2), hairM, head, 0, 0.2, -0.01);
-    part(tbox(0.06, 0.2, 0.06, 0.04, 0.04, true), hairM, head, 0, 0.2, -0.13).rotation.x = 0.35;
-  } else if (st === 'perm') part(tbox(0.22, 0.12, 0.25, 0.2, 0.22), hairM, head, 0, 0.17, -0.01);
-  else if (st === 'short') part(tbox(0.195, 0.05, 0.225, 0.18, 0.21), hairM, head, 0, 0.23, -0.005);
+    part(cap(1.9, 0.48, 1.06), hairM, head);
+    part(round(0.07, 0.2, 0.07, 0.03, 0.03, true), hairM, head, 0, 0.21, -0.11).rotation.x = 0.35;
+  } else if (st === 'perm') part(cap(1.7, 0.5, 1.16), hairM, head);
+  else if (st === 'short') part(cap(2.0, 0.4, 1.05), hairM, head);
 }
 function props(C, J, part) {
   const p = C.props, dark = lam(0x1a1a1c), white = lam(0xf2f2ee);
   if (p.includes('phone')) part(new THREE.BoxGeometry(0.03, 0.14, 0.07), dark, J.rWr, -0.03, -0.06, 0.02);
-  if (C.face.sunHead) part(new THREE.BoxGeometry(0.2, 0.03, 0.05), dark, J.head, 0, 0.25, 0.06);
+  if (C.face.sunHead) part(new THREE.BoxGeometry(0.17, 0.025, 0.045), dark, J.head, 0, 0.24, 0.04);
   if (p.includes('keys')) part(new THREE.BoxGeometry(0.03, 0.06, 0.02), lam(0xc8c8c8), J.rWr, 0, -0.1, 0);
   if (p.includes('latte')) { part(new THREE.CylinderGeometry(0.045, 0.035, 0.18, 6), white, J.rWr, 0, -0.06, 0.05); part(new THREE.CylinderGeometry(0.048, 0.048, 0.025, 6), lam(0x2a6a4a), J.rWr, 0, 0.04, 0.05); }
   if (p.includes('visor')) part(new THREE.BoxGeometry(0.22, 0.02, 0.12), white, J.head, 0, 0.2, 0.13);
-  if (p.includes('visorRed')) { part(new THREE.BoxGeometry(0.21, 0.05, 0.23), lam(0xa82a22), J.head, 0, 0.19, 0); part(new THREE.BoxGeometry(0.21, 0.02, 0.1), lam(0xa82a22), J.head, 0, 0.17, 0.15); }
+  if (p.includes('visorRed')) { part(cap(0, 0.35, 1.1), lam(0xa82a22), J.head, 0, 0.0, 0); part(new THREE.BoxGeometry(0.21, 0.02, 0.1), lam(0xa82a22), J.head, 0, 0.17, 0.15); }
   if (p.includes('headset')) part(new THREE.BoxGeometry(0.015, 0.015, 0.12), dark, J.head, -0.1, 0.07, 0.07);
-  if (p.includes('bucket')) { part(tbox(0.3, 0.02, 0.32, 0.3, 0.32), lam(0xc8bc98), J.head, 0, 0.2, 0); part(tbox(0.21, 0.1, 0.23, 0.18, 0.2), lam(0xc8bc98), J.head, 0, 0.2, 0); }
-  if (p.includes('cap')) { part(tbox(0.21, 0.07, 0.23, 0.19, 0.21), lam(0x1e2230), J.head, 0, 0.2, 0); part(new THREE.BoxGeometry(0.2, 0.02, 0.1), lam(0x1e2230), J.head, 0, 0.2, 0.15); part(new THREE.BoxGeometry(0.05, 0.04, 0.01), lam(0xc8a840), J.head, 0, 0.24, 0.12); }
+  if (p.includes('bucket')) { part(tbox(0.3, 0.02, 0.32, 0.3, 0.32), lam(0xc8bc98), J.head, 0, 0.2, 0); part(cap(0, 0.4, 1.12), lam(0xc8bc98), J.head, 0, 0.02, 0); }
+  if (p.includes('cap')) { part(cap(0, 0.42, 1.1), lam(0x1e2230), J.head, 0, 0.01, 0); part(new THREE.BoxGeometry(0.2, 0.02, 0.1), lam(0x1e2230), J.head, 0, 0.2, 0.15); part(new THREE.BoxGeometry(0.05, 0.04, 0.01), lam(0xc8a840), J.head, 0, 0.24, 0.12); }
   if (p.includes('clipboard')) { part(new THREE.BoxGeometry(0.24, 0.32, 0.02), lam(0x8a6a3a), J.lWr, 0, -0.08, 0.06); part(new THREE.BoxGeometry(0.2, 0.26, 0.005), white, J.lWr, 0, -0.1, 0.072); }
   if (p.includes('tumbler')) part(new THREE.CylinderGeometry(0.05, 0.045, 0.28, 6), lam(0x3aa8a0), J.rWr, 0, -0.06, 0.04);
   if (p.includes('spatula')) { part(new THREE.BoxGeometry(0.02, 0.3, 0.02), dark, J.rWr, 0, -0.18, 0.02); part(new THREE.BoxGeometry(0.1, 0.12, 0.01), lam(0xb8b8b8), J.rWr, 0, -0.38, 0.02); }

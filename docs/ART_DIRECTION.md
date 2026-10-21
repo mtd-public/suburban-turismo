@@ -69,7 +69,7 @@ Parked traffic reuses the same models in a limited palette of realistic period c
 
 ## 5. People (`js/people.js`)
 
-Fifteen boxes on a joint tree (MGS / Driver style), realistic proportions, painted faces (32×40), clothes with
+Fifteen rounded parts on a joint tree (8-sided trunk, 6-sided limbs, a sphere head with a wrap-around face texture, hair caps), realistic proportions, painted faces (32×40), clothes with
 collars, plackets, quilting, name tags. Character comes from **silhouette props + pose**: Karen's inverted bob,
 sunglasses parked on her head, phone to the ear and the other hand jabbing at you; Harold's bucket hat, clipboard
 and socks-with-sandals; the Joneses' matching smugness. Poses are procedural and loop (idle, gesture, power-walk).
@@ -111,9 +111,9 @@ with a hairline gold border, Georgia serif.
 
 ## 9. Open questions for the style review
 
-1. **PS1 dose** — is 240p + full jitter + 0.65 affine the right amount, or should the default lean "remaster"
+1. ~~PS1 dose~~ — decided: 240p with full wobble (the defaults below).
    (360p, less wobble)?
-2. **Time of day** — should the default be Autumn afternoon or Golden hour?
-3. **People** — the boxy MGS-style figures vs. something slightly rounder (more sides on limbs, a few more face
+2. ~~Time of day~~ — decided: Autumn afternoon by default, Golden hour as an option.
+3. ~~People~~ — decided: rounder (8-sided trunks, 6-sided limbs, sphere heads with wrap textures, hair caps).
    polys), still low-poly.
-4. **Car paint** — keep the realistic period palette, or allow a few louder "hero" colours for the player cars?
+4. ~~Car paint~~ — decided: realistic period colours.
