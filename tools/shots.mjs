@@ -1,11 +1,11 @@
-// Screenshots of the art test: every location view, every vehicle, every cast member, a drive, and PS1 on/off.
+// Screenshots of the art test (viewer.html): every location view, every vehicle, every cast member, a drive, and PS1 on/off.
 // Also fails on console errors and page scroll (template rule 10).
 // Usage: python3 -m http.server 4180 &  node tools/shots.mjs   (OUT=shots, BASE=http://localhost:4180/, ONLY=tour|garage|cast|drive|map|smash|misc)
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 const pw = await import('playwright').catch(() => import(join(execSync('npm root -g').toString().trim(), 'playwright', 'index.mjs')));
-const OUT = process.env.OUT || 'shots', base = process.env.BASE || 'http://localhost:4180/', ONLY = process.env.ONLY;
+const OUT = process.env.OUT || 'shots', base = (process.env.BASE || 'http://localhost:4180/') + 'viewer.html', ONLY = process.env.ONLY;
 mkdirSync(OUT, { recursive: true });
 const browser = await pw.chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-webgl', '--ignore-gpu-blocklist'] });
 const errors = [];

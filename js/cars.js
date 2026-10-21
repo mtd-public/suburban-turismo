@@ -86,6 +86,8 @@ function bodySideTex(S, prof) {
     g.fillStyle = S.cladding ? 'rgba(40,40,42,0.9)' : css([0, 0, 0], 0.2); g.fillRect(bb.z0, bb.y0, bb.z1 - bb.z0, 0.12);
     // body-side moulding (chrome on the luxury car, rubber elsewhere)
     if (S.moulding) { g.fillStyle = S.moulding; g.fillRect(bb.z0 + 0.1, S.mouldY, bb.z1 - bb.z0 - 0.2, 0.035); }
+    // a police cruiser's white doors and gold star
+    if (S.livery === 'police') { g.fillStyle = '#e6e4de'; g.fillRect(S.doors[0], 0.3, S.doors[S.doors.length - 1] - S.doors[0], S.belt - 0.33); g.fillStyle = '#d8b040'; g.beginPath(); g.arc((S.doors[0] + S.doors[1]) / 2, (S.belt + 0.3) / 2, 0.1, 0, Math.PI * 2); g.fill(); }
     // door shut lines and handles
     g.strokeStyle = 'rgba(10,10,12,0.75)'; g.lineWidth = mpp;
     for (const z of S.doors) { g.beginPath(); g.moveTo(z, 0.3); g.lineTo(z + 0.02, S.belt - 0.02); g.stroke(); }
@@ -260,8 +262,8 @@ export const VEHICLE_ORDER = ['minivan', 'sedan', 'hybrid', 'luxury', 'segway'];
 export function buildVehicle(key, opts = {}) {
   const S0 = VEHICLES[key];
   if (S0.segway) return buildSegway(opts);
-  const S = { ...S0, color: opts.color ?? S0.color };
-  const ck = `${key}${S.color}`;
+  const S = { ...S0, color: opts.color ?? S0.color, livery: opts.livery };
+  const ck = `${key}${S.color}${S.livery || ''}`;
   const root = new THREE.Group(), body = new THREE.Group();
   root.add(body);
   // lower body
@@ -333,6 +335,18 @@ export function buildVehicle(key, opts = {}) {
   }
   const sh = blobShadow(S.width + 0.5, len + 0.6); root.add(sh);
   root.userData = { key, spec: S0, body, wheels, wheelR: S.wheelR };
+  if (S.livery === 'police') { // the light bar: red and blue halves that flash (flashLights), with a glow sprite each
+    const ty = Math.max(...S.cabin.map((q) => q[1])), top = S.cabin.filter((q) => q[1] > ty - 0.05), tz = top.reduce((a, q) => a + q[0], 0) / top.length;
+    const bar = new THREE.Group(); bar.position.set(0, ty, tz); body.add(bar);
+    bar.add(Object.assign(new THREE.Mesh(new THREE.BoxGeometry(S.width * 0.72, 0.06, 0.3), lam(0x1a1a1c)), {}));
+    const lights = [];
+    for (const [sx, c] of [[-1, 0xff2a1a], [1, 0x2a5aff]]) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(S.width * 0.3, 0.12, 0.26), basic(c)); m.position.set(sx * S.width * 0.19, 0.08, 0); bar.add(m);
+      const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: tc('glow', glowTex), color: c, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); glow.scale.set(2.2, 2.2, 1); glow.position.copy(m.position); bar.add(glow);
+      lights.push({ m, glow, on: basic(c), off: basic(new THREE.Color(c).multiplyScalar(0.25).getHex()) });
+    }
+    root.userData.lights = lights;
+  }
   return root;
 }
 
@@ -359,6 +373,15 @@ function buildSegway(opts) {
   root.add(blobShadow(0.9, 0.9));
   root.userData = { key: 'segway', spec: VEHICLES.segway, body, wheels, wheelR: 0.24, rider };
   return root;
+}
+
+// A soft round glow for the light bar (additive sprite).
+function glowTex() { return canvasTex(32, 32, (g, w, h) => { const gr = g.createRadialGradient(16, 16, 0, 16, 16, 16); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.5)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }, { repeat: false }); }
+// Flash a cruiser's light bar: red, blue, red, blue, with a double blip (t: seconds, any clock).
+export function flashLights(car, t) {
+  const L = car.userData.lights; if (!L) return;
+  const ph = (t * 3.2) % 1, a = ph < 0.5, blip = (ph * 8 | 0) % 2 === 0;
+  L.forEach((l, k) => { const on = (k === 0 ? a : !a) && blip; l.m.material = on ? l.on : l.off; l.glow.visible = on; });
 }
 
 // Animate a vehicle from its body state: wheel spin, front-wheel steer, body roll and pitch (or the Segway lean).

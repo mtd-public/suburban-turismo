@@ -5,8 +5,9 @@ the CityMart lot. Realistic PS1-era low-poly art (Driver, The Getaway, early Gra
 comes from the cast and the mechanics. Pedestrians never die, but they ragdoll, yell, and chase you when you've
 made them angry.
 
-**Status: phase 1, the art-style test.** No gameplay yet. See [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) for
-the direction and the open questions, and [docs/art-test/](docs/art-test/) for screenshots.
+**Status: phase 2, playable.** Races, time trials and the final level are in; pedestrians (ragdoll, yell, chase)
+are next. See [docs/ART_DIRECTION.md](docs/ART_DIRECTION.md) for the look and [docs/art-test/](docs/art-test/)
+for screenshots.
 
 ## Run
 
@@ -14,20 +15,42 @@ the direction and the open questions, and [docs/art-test/](docs/art-test/) for s
 python3 -m http.server 8080
 ```
 
-Open `http://localhost:8080`. No build step: three.js r160 is vendored and loaded through an import map (the Dr. Mow
-/ store-smash convention).
+Open `http://localhost:8080` for the game, `http://localhost:8080/viewer.html` for the art test (locations, cars,
+cast, the Routes map, free driving). No build step: three.js r160 is vendored and loaded through an import map
+(the Dr. Mow / store-smash convention).
 
-| Tab | What it shows |
+### The game (`index.html`, `js/game.js`)
+
+| Mode | |
 |---|---|
-| Locations | a slow camera tour of each sample location (◀ ▶ step through views) |
-| Garage | the five test vehicles on a turntable |
-| Cast | each suburban character, framed where they live |
-| Drive | drive any of the five round the town: WASD / arrows / stick, Space hops, ◀ ▶ swaps vehicle, `G` jumps to the CityMart lot, `R` puts every knocked prop and broken pane back, `T` lays each race circuit on the road in turn |
-| Routes | the five race circuits from straight overhead, as a see-through layer (◀ ▶: all, then each one) |
-| PS1 ⚙ | the PS1 dose live: resolution, vertex jitter, affine warp, draw distance, dither, full-res compare, time of day |
+| Race | 3 laps against five of the neighbours (Karen, the Joneses, Brenda, Greg, Harold, Tyler), matched to your car so any car can win |
+| Time Trial | 3 laps alone against a ghost: the pro's run first; once you beat it, the ghost is your own best (kept in the browser) |
+| The Last Run | the final level: one 1.6 km run through every location to the mall, seven police cruisers with flashing light bars behind you and roadblocks ahead (Blues Brothers) |
 
-Keys: `1`–`5` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel. URL parameters for screenshots:
-`?mode=tour|garage|cast|drive|map&i=N&cam=N&light=autumn|golden|overcast|dusk&ps1=0&ui=0`.
+Six circuits (`js/routes.js`): Whispering Pines GP, Drive-Thru Derby, Black Friday, Mall Crawl, Maple Parkway Grand
+Prix, and The Last Run. Each is a see-through track layer over the town that goes on and off road, through glass,
+hedges and the odd hydrant.
+
+| | Keyboard | Gamepad | Touch |
+|---|---|---|---|
+| Gas | W / ↑ | RT or A | GAS pedal |
+| Brake, then reverse | S / ↓ | LT or B | BRAKE pedal |
+| Steer | A D / ← → | left stick / d-pad | drag on the left half |
+| Drift | brake + steer at speed | LT/B + steer | BRAKE + drag |
+| Camera (chase / bumper) | C | Y | 🎥 |
+| Back on the track | R | Back | ↺ |
+| Hop | Space | X | |
+| Pause | Esc / P | Start | ❚❚ |
+
+Menus take arrows + Enter / Esc, the stick or d-pad + A / B, or a tap. Back up and a rear-view mirror slides down.
+URL parameters for testing: `?mode=race|tt&circuit=pines|drivethru|blackfriday|mallcrawl|grandprix|finale&car=minivan|sedan|hybrid|luxury|segway&auto=1`
+(`auto=1`: the CPU drives you).
+
+### The art test (`viewer.html`, `js/main.js`)
+
+Tabs: Locations (a camera tour), Garage (the five vehicles), Cast, Drive (free driving: `G` jumps to the CityMart
+lot, `R` resets props, `T` lays each circuit on the road), Routes (every circuit from overhead), and the PS1 ⚙
+panel (resolution, jitter, affine warp, draw distance, dither, time of day). `1`–`5` switch tabs.
 
 ## Layout
 
@@ -41,6 +64,10 @@ Keys: `1`–`5` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel.
 | `js/town.js` | the town: Maple Parkway and the five locations (CityMart is hollow and drivable), plus the collision world |
 | `js/routes.js` | the race circuits: waypoints, smooth closed racing lines, the see-through track layer, `onTrack` (keeps trees and parked cars off the line) |
 | `js/props.js` | things you can hit: loose props that tumble and settle, smashable glass, shelves that shed stock |
+| `js/game.js` | the game: modes, the race loop, cops, cameras (chase / bumper / mirror), HUD and speedometer, menus |
+| `js/race.js` | a race on a circuit: progress and laps, the CPU drivers, car-to-car bumps, ghosts, the pro's simulated run |
+| `js/controls.js` | racing input: keyboard, gamepad (analog steer, triggers), touch (steer drag, pedals), menu navigation |
+| `js/stage.js` | the shared world: renderer, scene and light presets, town, collision world, props, the cast |
 | `js/main.js` | the viewer: modes, cameras, lighting presets, Driver-style HUD and minimap |
 | `js/drive.js`, `js/world.js`, `js/input.js`, `js/tuning.js`, `js/utils.js` | from store-smash (Dr. Mow's controller) |
 | `tools/shots.mjs` | headless screenshots of every view; fails on console errors or page scroll |
@@ -50,6 +77,8 @@ Keys: `1`–`5` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel.
 
 ```
 python3 -m http.server 4180 &
-node tools/shots.mjs          # shots/ — 0 console errors, no page scroll on a phone
+node tools/play.mjs           # the game: menus, a race, a time trial and the final level on autopilot, mirror, drift, phone
+node tools/lines.mjs          # every circuit's racing line against the walls and posts (must be clear)
+node tools/shots.mjs          # the art test: every view; 0 console errors, no page scroll on a phone
 ONLY=smash node tools/shots.mjs   # drives through CityMart's glass; fails if nothing breaks
 ```

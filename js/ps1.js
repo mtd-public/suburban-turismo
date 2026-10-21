@@ -104,10 +104,10 @@ export class PS1Renderer {
     this.r.setPixelRatio(1);
     this.rt = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
     this.post = new THREE.ShaderMaterial({
-      uniforms: { tScene: { value: this.rt.texture }, uRes: { value: new THREE.Vector2(4, 4) }, uDither: { value: 1 }, uLevels: { value: 31 } },
+      uniforms: { tScene: { value: this.rt.texture }, uRes: { value: new THREE.Vector2(4, 4) }, uDither: { value: 1 }, uLevels: { value: 31 }, uFlip: { value: 0 } },
       vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader: `
-        uniform sampler2D tScene; uniform vec2 uRes; uniform float uDither; uniform float uLevels; varying vec2 vUv;
+        uniform sampler2D tScene; uniform vec2 uRes; uniform float uDither; uniform float uLevels; uniform float uFlip; varying vec2 vUv;
         float bayer(vec2 p) {
           int x = int(mod(p.x, 4.0)), y = int(mod(p.y, 4.0));
           int i = x + y * 4;
@@ -115,7 +115,7 @@ export class PS1Renderer {
           return (float(m[i]) + 0.5) / 16.0 - 0.5;
         }
         void main() {
-          vec2 px = floor(vUv * uRes);
+          vec2 px = floor(vec2(uFlip > 0.5 ? 1.0 - vUv.x : vUv.x, vUv.y) * uRes);
           vec3 c = texture2D(tScene, (px + 0.5) / uRes).rgb;
           if (uDither > 0.5) c = floor(clamp(c, 0.0, 1.0) * uLevels + 0.5 + bayer(px)) / uLevels;
           gl_FragColor = vec4(c, 1.0);
@@ -147,5 +147,24 @@ export class PS1Renderer {
     this.r.render(scene, cam);
     this.r.setRenderTarget(null);
     this.r.render(this.postScene, this.postCam);
+  }
+  // A second, smaller view drawn over the frame at (x, y, w, h) CSS px from the top-left, at the same PS1 line
+  // density, mirrored left-right (a rear-view mirror).
+  renderInset(scene, cam, x, y, w, h, flip = true) {
+    if (!this.rt2) {
+      this.rt2 = new THREE.WebGLRenderTarget(4, 4, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: true });
+      this.post2 = this.post.clone(); this.post2.uniforms.tScene.value = this.rt2.texture;
+      this.postScene2 = new THREE.Scene(); const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.post2); q.frustumCulled = false; this.postScene2.add(q);
+    }
+    const lh = Math.max(16, Math.round((this.native ? this.h : PS1.lines) * h / this.h)), lw = Math.max(16, Math.round(lh * w / h));
+    this.rt2.setSize(lw, lh);
+    const P = this.post2.uniforms; P.uRes.value.set(lw, lh); P.uFlip.value = flip ? 1 : 0; P.uDither.value = PS1.dither; P.uLevels.value = (1 << PS1.colorBits) - 1;
+    const snap = U.uSnap.value.clone(); U.uSnap.value.set(lw, lh);
+    this.r.setRenderTarget(this.rt2); this.r.render(scene, cam); this.r.setRenderTarget(null);
+    U.uSnap.value.copy(snap);
+    const vy = this.h - y - h;
+    this.r.setViewport(x, vy, w, h); this.r.setScissor(x, vy, w, h); this.r.setScissorTest(true);
+    this.r.autoClear = false; this.r.render(this.postScene2, this.postCam); this.r.autoClear = true;
+    this.r.setScissorTest(false); this.r.setViewport(0, 0, this.w, this.h);
   }
 }

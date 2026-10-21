@@ -12,7 +12,7 @@ import * as T from './tex.js';
 import { OFF1, OFF2, tbox, baseBox, patch, disc, ring, line, decal, tree, mergeStatic } from './geo.js';
 import { buildVehicle } from './cars.js';
 import { mulberry32 } from './utils.js';
-import { onTrack } from './routes.js';
+import { onTrack, ROUTES, routeSamples, TRACK_W } from './routes.js';
 
 const ROAD_HW = 7, KERB = 0.15;
 
@@ -57,10 +57,11 @@ export function buildTown() {
         solid(cx, side * (ROAD_HW + 2.5), w, 5, KERB);
         // street trees in the verge and street lamps
         for (let x = x0 + 6; x < a - 4; x += 24) {
+          if (onTrack(x, side * (ROAD_HW + 1.3), 1)) continue; // (a circuit crosses the verge here)
           add(tree(x, side * (ROAD_HW + 1.3), 0.9 + rnd() * 0.25, (rnd() * 6 | 0) + 1, T.FALL[rnd() * 7 | 0])); post(x, side * (ROAD_HW + 1.3), 0.3);
           add(leafScatter(x, side * (ROAD_HW + 1.3), 3.5, rnd));
         }
-        for (let x = x0 + 18; x < a - 4; x += 36) streetLamp(x, side * (ROAD_HW + 0.5), side < 0 ? 0 : Math.PI);
+        for (let x = x0 + 18; x < a - 4; x += 36) if (!onTrack(x, side * (ROAD_HW + 0.5), 1)) streetLamp(x, side * (ROAD_HW + 0.5), side < 0 ? 0 : Math.PI);
       }
       x0 = Math.max(x0, b);
     }
@@ -475,18 +476,18 @@ export function buildTown() {
     // general merchandise (east): toy and home aisles, the TV wall, apparel racks, pharmacy at the back
     for (let i = 0; i < 5; i++) gondola(sx + 30 + i * 6, zc + 2, 22, i < 2 ? 'toys' : 'gm');
     add(baseBox(52, 2.8, 0.8, [M.kerb, M.kerb, M.slab, M.slab, lam(0xffffff, T.tvWall()), M.kerb], [1, 1, 1, 1, 4, 1], sx + 32, KERB, sz1 + 1.0)); solid(sx + 32, sz1 + 1.0, 52, 0.8, 2.9);
-    for (let i = 0; i < 9; i++) { const x = sx + 6 + (i % 3) * 5, z = zc + 14 - (i / 3 | 0) * 5; add(baseBox(0.08, 1.5, 0.08, M.pole, null, x, KERB, z)); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.0, 8, 1, true), lam([0x7a2a3a, 0x2a4a6a, 0xc8a86a, 0x4a6a4a][i % 4], T.grit(40), { side: THREE.DoubleSide })); r.position.set(x, KERB + 0.9, z); add(r); post(x, z, 0.8, 1.5); }
+    for (let i = 0; i < 9; i++) { const x = sx + 6 + (i % 3) * 5, z = zc + 6 - (i / 3 | 0) * 5; add(baseBox(0.08, 1.5, 0.08, M.pole, null, x, KERB, z)); const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.0, 8, 1, true), lam([0x7a2a3a, 0x2a4a6a, 0xc8a86a, 0x4a6a4a][i % 4], T.grit(40), { side: THREE.DoubleSide })); r.position.set(x, KERB + 0.9, z); add(r); post(x, z, 0.8, 1.5); }
     add(baseBox(12, 1.1, 1.0, [coM, coM, M.slab, M.slab, coM, coM], 2, sx, KERB, sz1 + 5)); solid(sx, sz1 + 5, 12, 1.0, 1.25);
     add(baseBox(12, 4, 0.4, inW, 4, sx, KERB, sz1 + 1.3));
     // hanging department signs
     const hang = (text, x, z, ry = 0) => { const g = new THREE.Group(); const m = lam(0xffffff, T.sign(text, { w: 64, h: 16, bg: '#2a5aa8', font: 'bold 10px Arial', grime: 0 })); g.add(baseBox(4.2, 1.0, 0.1, lam(0x2a5aa8), null, 0, 0, 0)); g.add(decal(4, 0.9, m, 0, 0.5, 0.06)); g.add(decal(4, 0.9, m, 0, 0.5, -0.06, Math.PI)); g.add(baseBox(0.03, sh - 7.5, 0.03, M.pole, null, -1.5, 1, 0)); g.add(baseBox(0.03, sh - 7.5, 0.03, M.pole, null, 1.5, 1, 0)); g.position.set(x, 6.2, z); g.rotation.y = ry; add(g); };
     hang('GROCERY', sx - 19, zc - 8); hang('PRODUCE', sx - 48, sz0 - 18); hang('FROZEN', sx - 55, zc - 6, Math.PI / 2); hang('TOYS', sx + 36, zc + 2); hang('HOME', sx + 48, zc + 2);
-    hang('ELECTRONICS', sx + 32, sz1 + 6); hang('APPAREL', sx + 11, zc + 18); hang('PHARMACY', sx, sz1 + 7); hang('FALL HARVEST', sx, sz0 - 15);
+    hang('ELECTRONICS', sx + 32, sz1 + 6); hang('APPAREL', sx + 11, zc + 4); hang('PHARMACY', sx, sz1 + 7); hang('FALL HARVEST', sx, sz0 - 15);
     // what you can knock over inside
     for (const x of [sx - 22, sx - 10, sx + 8, sx + 20]) dyn.push(['soda', x, sz0 - 15.5]);
     for (let i = 0; i < 8; i++) dyn.push(['produce', sx - 54 + (i % 4) * 3.2, sz0 - 18 - (i / 4 | 0) * 3.2]);
     for (let i = 0; i < 6; i++) dyn.push(['produce', sx - 4 + (i % 3) * 3, sz0 - 18 - (i / 3 | 0) * 2.6]); // the seasonal pumpkin bins
-    for (let i = 0; i < 6; i++) dyn.push(['mannequin', sx + 4 + i * 2.6, zc + 19.5, rnd() * 6]);
+    for (let i = 0; i < 6; i++) dyn.push(['mannequin', sx + 4 + i * 2.6, zc + 10, rnd() * 6]);
     for (let i = 0; i < 10; i++) dyn.push(['cart', sx - 50 + rnd() * 100, sz0 - 13.5 - rnd() * 3, rnd() * 6]);
     for (let i = 0; i < 6; i++) dyn.push(['boxes', sx - 34 + i * 6, zc - 22.6, rnd()]);
     for (let i = 0; i < 5; i++) dyn.push(['boxes', sx + 30 + i * 6, zc - 10.6, rnd()]);
@@ -509,6 +510,34 @@ export function buildTown() {
     // the pole sign by the parkway
     sign(68, -14, 0, 'CityMart', { y: 10, w: 7, h: 2.4, tex: { w: 96, h: 32, bg: '#1e4aa0', fg: '#ffffff', font: 'bold 20px Arial', sub: 'OPEN 24 HOURS · PHARMACY', subFont: 'bold 6px Arial' } });
     spots.doris = { x: sx - 35.5, z: sz0 + 7.4, ry: 0.3 }; // beside the door, not in it
+  }
+
+  // ------------------------------------------------------------ crashables: bushes, hydrants, stray carts
+  {
+    const busy = (x, z) => plats.some((p) => p.h > 0.3 && Math.abs(x - p.x) < p.w / 2 + 1.2 && Math.abs(z - p.z) < p.d / 2 + 1.2) || posts.some((q) => Math.hypot(x - q.x, z - q.z) < q.r + 1.2);
+    const bushAt = (x, z) => { if (!busy(x, z)) dyn.push(['bush', x, z, rnd() * 6]); };
+    // the parkway: hydrants on the verge, a row of shrubs along the back of the sidewalk
+    for (const side of [-1, 1]) {
+      for (let x = -240; x < 240; x += 58) if (!busy(x + 9, side * (ROAD_HW + 2))) dyn.push(['hydrant', x + 9, side * (ROAD_HW + 2.1)]);
+      for (let x = -250; x < 250; x += 7 + rnd() * 6) if (rnd() < 0.7) bushAt(x, side * (ROAD_HW + 6.2 + rnd() * 1.2));
+    }
+    // both sides of every circuit, every so often (hedge-hopping is half the point)
+    for (const r of ROUTES) for (const smp of routeSamples(r, 16)) for (const side of [-1, 1]) if (rnd() < 0.45) {
+      const o = TRACK_W / 2 + 0.6 + rnd() * 2.5; bushAt(smp.x - smp.tz * o * side, smp.z + smp.tx * o * side);
+    }
+    // foundation planting in the cul-de-sac and round the park and the lots
+    for (let z = -20; z > -78; z -= 5) for (const s of [-1, 1]) if (rnd() < 0.55) bushAt(-130 + s * (7.4 + rnd() * 1.5), z);
+    for (let k = 0; k < 40; k++) bushAt(-178 + rnd() * 106, 16 + rnd() * 96);
+    for (let x = -36; x < 20; x += 4) if (rnd() < 0.6) bushAt(x, -73.5);
+    for (let z = -16; z > -70; z -= 4) if (rnd() < 0.6) bushAt(-41.5, z);
+    for (let x = 52; x < 190; x += 5) if (rnd() < 0.55) bushAt(x, -14.5);
+    for (let x = -20; x < 140; x += 5) if (rnd() < 0.5) bushAt(x, ROAD_HW + 5.6);
+    // hydrants: the cul-de-sac, the lots
+    for (const [x, z] of [[-123.6, -30], [-136.4, -58], [-118, -100], [-24, -70], [20, -24], [56, -90], [188, -90], [-20, 60], [140, 60], [-110, 30]]) if (!busy(x, z)) dyn.push(['hydrant', x, z]);
+    // stray carts: CityMart's lot is full of them, the Promenade and McDaniel's have a few
+    for (let i = 0; i < 14; i++) dyn.push(['stray', 60 + rnd() * 125, -20 - rnd() * 66, rnd() * 6]);
+    for (let i = 0; i < 9; i++) dyn.push(['stray', -16 + rnd() * 150, 16 + rnd() * 40, rnd() * 6]);
+    for (let i = 0; i < 3; i++) dyn.push(['stray', -34 + rnd() * 50, -56 - rnd() * 12, rnd() * 6]);
   }
 
   // ------------------------------------------------------------ woods: autumn tree stands in the gaps between places

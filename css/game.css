@@ -1,0 +1,75 @@
+/* Suburban Turismo, the game: Driver / Gran Turismo menus (dark translucent slabs, a hairline gold border, serif
+   yellow titles) and a racing HUD in the same voice. */
+:root { --ink: #f2ecd8; --gold: #e8d050; --slab: rgba(16, 22, 40, 0.8); --line: rgba(232, 208, 80, 0.55); --good: #6ae07a; --bad: #ff6a5a; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2238; color: var(--ink); font-family: Georgia, 'Times New Roman', serif; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; image-rendering: pixelated; }
+button { font-family: inherit; cursor: pointer; touch-action: none; }
+.sh { text-shadow: 2px 2px 0 #000; }
+
+/* ---- HUD */
+#hud { display: none; position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+body.racing #hud { display: block; }
+#h-left { position: absolute; top: max(10px, env(safe-area-inset-top)); left: 14px; }
+#h-pos { font-size: 54px; font-weight: bold; color: var(--gold); line-height: 1; text-shadow: 3px 3px 0 #000; }
+#h-pos small { font-size: 26px; }
+#h-pos i { font-size: 24px; color: var(--ink); font-style: normal; margin-left: 4px; }
+#h-pos .tt { font-size: 24px; letter-spacing: 1px; }
+#h-lap { font-size: 22px; font-weight: bold; color: var(--ink); text-shadow: 2px 2px 0 #000; letter-spacing: 1px; margin-top: 2px; }
+#h-right { position: absolute; top: max(10px, env(safe-area-inset-top)); right: 14px; text-align: right; }
+#h-time { font-size: 32px; font-weight: bold; color: var(--gold); text-shadow: 3px 3px 0 #000; font-variant-numeric: tabular-nums; }
+#h-laps { font-size: 15px; text-shadow: 2px 2px 0 #000; font-variant-numeric: tabular-nums; line-height: 1.35; }
+#h-ghost { font-size: 15px; text-shadow: 2px 2px 0 #000; margin-top: 4px; }
+#h-ghost b { color: #cfe0ff; }
+.good { color: var(--good) !important; } .bad { color: var(--bad) !important; }
+#speedo { position: absolute; right: 14px; bottom: max(14px, env(safe-area-inset-bottom)); width: 168px; height: 168px; }
+#msg { position: fixed; left: 0; right: 0; top: 30%; text-align: center; font: bold 64px Georgia, serif; color: var(--gold); text-shadow: 4px 4px 0 #000; opacity: 0; transform: scale(0.8); transition: opacity 0.15s, transform 0.15s; pointer-events: none; z-index: 3; }
+#msg.on { opacity: 1; transform: none; }
+/* the rear-view mirror's frame (the view itself is drawn into the canvas underneath) */
+#mirror { display: none; position: fixed; z-index: 2; pointer-events: none; border: 4px solid #1a1a1c; border-radius: 10px; box-shadow: 0 0 0 1px #555, 0 4px 10px rgba(0, 0, 0, 0.5); }
+
+/* ---- touch: drag the left half to steer, pedals on the right, small buttons top centre */
+#touch { display: none; }
+body.touch.racing #touch { display: block; }
+#touch .steer-hint { position: fixed; left: 0; width: 50%; bottom: 22px; text-align: center; font-size: 13px; color: rgba(255, 255, 255, 0.45); pointer-events: none; text-shadow: 1px 1px 0 #000; }
+#touch .pedal { position: fixed; bottom: max(18px, env(safe-area-inset-bottom)); width: 84px; height: 110px; border: 2px solid var(--line); background: rgba(16, 22, 40, 0.55); color: var(--ink); font-weight: bold; font-size: 14px; border-radius: 10px; z-index: 4; }
+#touch .pedal.gas { right: 16px; height: 130px; }
+#touch .pedal.brake { right: 112px; }
+#touch .pedal.down { background: rgba(232, 208, 80, 0.5); color: #111; }
+#touch .tbtns { position: fixed; top: max(10px, env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; gap: 8px; z-index: 4; }
+#touch .tbtns button { width: 44px; height: 40px; border: 1px solid var(--line); background: var(--slab); color: var(--ink); font-size: 16px; border-radius: 6px; }
+body.touch #speedo { bottom: auto; top: 110px; right: 10px; width: 112px; height: 112px; }
+
+/* ---- menus */
+#menu { display: none; position: fixed; inset: 0; z-index: 5; pointer-events: none; }
+#menu.on { display: block; }
+#menu .panel { pointer-events: auto; position: absolute; left: max(16px, env(safe-area-inset-left)); top: 50%; transform: translateY(-50%); width: min(460px, 46vw); max-height: calc(100dvh - 32px); overflow: auto; background: var(--slab); border: 1px solid var(--line); padding: 16px 18px; }
+#menu.pause .panel, #menu.results .panel { left: 50%; transform: translate(-50%, -50%); width: min(460px, calc(100vw - 32px)); }
+#menu h1 { margin: 0 0 2px; font-size: 34px; letter-spacing: 3px; color: var(--gold); text-shadow: 3px 3px 0 #000; }
+#menu h1 i { color: #fff; }
+#menu h2 { margin: 0 0 10px; font-size: 22px; color: var(--gold); text-shadow: 2px 2px 0 #000; }
+#menu .tag { margin: 0 0 14px; font-style: italic; color: #c8c0a8; }
+#menu .items { display: flex; flex-direction: column; gap: 6px; }
+#menu button { text-align: left; background: rgba(255, 255, 255, 0.04); color: var(--ink); border: 1px solid rgba(232, 208, 80, 0.25); padding: 9px 12px; font-size: 18px; }
+#menu button small { display: block; font-size: 12.5px; font-style: italic; color: #c8c0a8; margin-top: 2px; }
+#menu button b { color: var(--gold); margin-right: 4px; }
+#menu button.focus { background: var(--gold); color: #161616; border-color: var(--gold); }
+#menu button.focus small, #menu button.focus b { color: #2a2a20; }
+#menu button.back { font-size: 15px; }
+#menu .stats { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr; gap: 3px 6px; align-items: center; font-size: 11px; margin-top: 5px; }
+#menu .bar { display: inline-block; height: 6px; background: rgba(255, 255, 255, 0.18); }
+#menu .bar span { display: block; height: 100%; background: currentColor; }
+#menu .blurb, #menu .note { font-size: 14px; line-height: 1.4; margin: 12px 0 0; color: #ddd6c0; }
+#menu .keys { font-size: 12px; line-height: 1.5; color: #b8b09a; margin: 14px 0 0; }
+#menu table { width: 100%; border-collapse: collapse; font-size: 15px; margin-bottom: 12px; font-variant-numeric: tabular-nums; }
+#menu td { padding: 4px 6px; border-bottom: 1px solid rgba(232, 208, 80, 0.15); }
+#menu td:last-child { text-align: right; }
+#menu tr.me td { color: var(--gold); font-weight: bold; }
+@media (max-width: 760px) {
+  #menu .panel { left: 10px; right: 10px; width: auto; top: auto; bottom: max(10px, env(safe-area-inset-bottom)); transform: none; max-height: 58dvh; padding: 12px 14px; }
+  #menu h1 { font-size: 24px; } #menu button { font-size: 16px; padding: 7px 10px; } #menu .keys { display: none; }
+  #h-pos { font-size: 40px; } #h-time { font-size: 24px; } #msg { font-size: 44px; }
+}
+
+#loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: #1a2238; z-index: 9; }
+#loading b { color: var(--gold); font-size: 28px; letter-spacing: 3px; }

@@ -1,6 +1,8 @@
 // Things you can hit: loose props that get knocked flying, tumble and settle; shop glass that shatters; shelf
 // stock that spills when you plough into a gondola. Cheap rigid bodies (a sphere per prop, gravity, bounce,
 // spin, ground friction, wall bounces off the platform world) — the PS1 way: no solver, just believable arcs.
+// Plus the soft stuff: bushes you plough flat in a spray of leaves, fire hydrants that blow a geyser when you
+// clip them, and stray carts that wander the lots on their own.
 import * as THREE from 'three';
 import { lam, basic, canvasTex } from './ps1.js';
 import * as T from './tex.js';
@@ -54,6 +56,21 @@ const BUILD = {
     return { g, r: 0.6, h: 0.35, m: 1.0 };
   },
   mannequin(R) { const g = new THREE.Group(), w = lam(0xe8e4dc, T.grit()), c = lam([0x7a2a3a, 0x2a4a6a, 0xc8a86a][R() * 3 | 0], T.grit()); g.add(cyl(0.16, 0.13, 0.6, c, 0, 0.25, 0, 8)); g.add(cyl(0.11, 0.09, 0.75, c, 0, -0.42, 0, 6)); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), w).translateY(0.68)); g.add(cyl(0.2, 0.2, 0.03, lam(0x2a2a2a), 0, -0.82, 0, 8)); return { g, r: 0.25, h: 0.84, m: 0.4 }; },
+  stray(R) { return BUILD.cart(R); }, // a cart nobody brought back: it drifts round the lot on the wind
+  bush(R) { // a shrub: a lumpy clipped dome, autumn-tinged or still green
+    const g = new THREE.Group(), s = 0.8 + R() * 0.5, tone = R() < 0.6 ? null : T.FALL[(R() * 4 | 0) + 1];
+    const m = tone ? lam(new THREE.Color(`rgb(${tone.map((v) => Math.min(255, v + 40)).join(',')})`).getHex(), T.hedge()) : lam(0xffffff, T.hedge());
+    const dome = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75 * s, 1), m); dome.scale.set(1.1, 0.72, 1); g.add(dome);
+    for (let k = 0; k < 3; k++) { const q = new THREE.Mesh(new THREE.IcosahedronGeometry(0.42 * s, 0), m); q.position.set(Math.cos(k * 2.1) * 0.5 * s, 0.2 * s, Math.sin(k * 2.1) * 0.45 * s); g.add(q); }
+    return { g, r: 0.8 * s, h: 0.5 * s, m: 0.5, soft: true };
+  },
+  hydrant(R) { // a squat red-and-white hydrant: it pops off its stand and the main lets go
+    const g = new THREE.Group(), red = lam(0xb82a20, T.grit()), wh = lam(0xe8e4dc, T.grit());
+    g.add(cyl(0.15, 0.17, 0.62, red, 0, 0, 0, 8)); g.add(cyl(0.18, 0.18, 0.06, wh, 0, -0.28, 0, 8)); g.add(new THREE.Mesh(new THREE.SphereGeometry(0.15, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2), wh).translateY(0.3));
+    for (const s of [-1, 1]) g.add(cyl(0.06, 0.06, 0.14, wh, s * 0.17, 0.08, 0, 6).rotateZ(Math.PI / 2));
+    g.add(cyl(0.08, 0.08, 0.1, wh, 0, 0.08, 0.17, 6).rotateX(Math.PI / 2));
+    return { g, r: 0.25, h: 0.34, m: 1.4, hydrant: true };
+  },
   item(R) { const k = ['tv', 'cereal', 'toy', 'towel', 'soda', 'candy'][R() * 6 | 0], s = 0.18 + R() * 0.16; const g = new THREE.Group(); g.add(box(s * 1.3, s, s * 0.8, lam(0xffffff, productTex(k)))); return { g, r: s * 0.6, h: s / 2, m: 0.1 }; },
 };
 
@@ -66,12 +83,25 @@ export class Props {
     this.shardI = 0;
     this.spillPool = Array.from({ length: 36 }, () => { const p = this.spawn('item', 0, -50, 0); p.mesh.visible = false; p.pooled = true; return p; });
     this.spillI = 0;
+    // leaves off a flattened bush, and the hydrant geysers (water drops + a column)
+    this.leafMs = T.FALL.slice(0, 5).map((c) => basic(new THREE.Color(`rgb(${c[0]},${c[1]},${c[2]})`).getHex(), null, { side: THREE.DoubleSide }));
+    this.leafMs.push(basic(0x4a6a30, null, { side: THREE.DoubleSide }));
+    const leafG = new THREE.PlaneGeometry(0.16, 0.12);
+    this.leaves = Array.from({ length: 120 }, (_, i) => { const m = new THREE.Mesh(leafG, this.leafMs[i % this.leafMs.length]); m.visible = false; m.userData = { v: new THREE.Vector3(), w: new THREE.Vector3(), t: 0 }; scene.add(m); return m; });
+    this.leafI = 0;
+    this.dropM = basic(0xd8eaf2, null, { transparent: true, opacity: 0.7, depthWrite: false });
+    const dropG = new THREE.PlaneGeometry(0.14, 0.22);
+    this.drops = Array.from({ length: 160 }, () => { const m = new THREE.Mesh(dropG, this.dropM); m.visible = false; m.userData = { v: new THREE.Vector3(), t: 0 }; scene.add(m); return m; });
+    this.dropI = 0;
+    this.columnM = basic(0xcfe4ee, null, { transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide });
+    this.geysers = [];
   }
   spawn(kind, x, z, ry = 0, y = null) {
     const { g, r, h, m } = BUILD[kind](this.rnd);
     const gy = y ?? groundAt(this.W, x, z, 3).h;
     g.position.set(x, gy + h, z); g.rotation.y = ry; this.scene.add(g);
-    const p = { kind, mesh: g, r, h, m, v: new THREE.Vector3(), w: new THREE.Vector3(), awake: false, home: { x, y: gy + h, z, ry } };
+    const p = { kind, mesh: g, r, h, m, soft: kind === 'bush', hydrant: kind === 'hydrant', v: new THREE.Vector3(), w: new THREE.Vector3(), awake: false, home: { x, y: gy + h, z, ry } };
+    if (kind === 'stray') { p.aimless = true; p.drift = this.rnd() * Math.PI * 2; p.dv = 0.25 + this.rnd() * 0.4; }
     this.list.push(p);
     return p;
   }
@@ -97,11 +127,20 @@ export class Props {
     for (const P of this.list) {
       if (!P.mesh.visible) continue;
       const q = P.mesh.position;
+      if (P.flat || Math.abs(q.x - B.x) > 6 || Math.abs(q.z - B.z) > 6) continue; // (a flattened bush is just leaves now)
       for (const [cx, cz, cr] of cs) {
         const dx = q.x - cx, dz = q.z - cz, d = Math.hypot(dx, dz), min = cr + P.r;
         if (d >= min || q.y - P.h > B.y + 1.6 || d < 1e-4) continue;
+        if (P.soft) { // a bush doesn't fly: it goes flat under you and throws its leaves
+          if (sp < 1.5) continue;
+          P.flat = true; P.mesh.scale.set(1.25, 0.28, 1.25); P.mesh.position.y = P.home.y - P.h * 0.62; P.mesh.rotation.z = (this.rnd() - 0.5) * 0.4;
+          for (let i = 0; i < 22; i++) this.leaf(q.x, q.y + 0.3, q.z, fx * sp * 0.5, fz * sp * 0.5, 2 + sp * 0.2);
+          B.speed *= 0.93; this.fx.hits++; this.onEvent?.('bush', P);
+          break;
+        }
         const nx = dx / d, nz = dz / d, push = min - d;
         q.x += nx * push; q.z += nz * push;
+        if (P.hydrant && !P.burst && Math.abs(B.speed) > 2) { P.burst = true; this.geyser(P.home.x, P.home.y - P.h, P.home.z); this.onEvent?.('hydrant', P); }
         const vb = B.speed * (fx * nx + fz * nz), vp = P.v.x * nx + P.v.z * nz;
         if (vb - vp > 0.5) {
           const k = (vb - vp) * (1.4 + this.rnd() * 0.4);
@@ -125,6 +164,15 @@ export class Props {
       P.w.set(this.rnd() * 8 - 4, this.rnd() * 8 - 4, this.rnd() * 8 - 4); P.awake = true;
     }
     this.fx.spills++;
+  }
+  leaf(x, y, z, vx, vz, up) {
+    const l = this.leaves[this.leafI++ % this.leaves.length], u = l.userData;
+    l.visible = true; l.position.set(x + (this.rnd() - 0.5), y, z + (this.rnd() - 0.5));
+    u.v.set(vx * this.rnd() + (this.rnd() - 0.5) * 4, up * (0.6 + this.rnd()), vz * this.rnd() + (this.rnd() - 0.5) * 4); u.w.set(this.rnd() * 12 - 6, this.rnd() * 12 - 6, this.rnd() * 12 - 6); u.t = 0;
+  }
+  geyser(x, y, z) {
+    const col = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.3, 1, 6, 1, true), this.columnM); col.position.set(x, y, z); this.scene.add(col);
+    this.geysers.push({ x, y, z, t: 0, col, acc: 0 });
   }
   shard(x, y, z, vx, vz) {
     const s = this.shards[this.shardI++ % this.shards.length], u = s.userData;
@@ -154,6 +202,32 @@ export class Props {
       e.set(P.w.x * dt, P.w.y * dt, P.w.z * dt); qd.setFromEuler(e); P.mesh.quaternion.premultiply(qd);
       if (q.y < -20) { P.awake = false; P.mesh.visible = false; }
     }
+    // stray carts: a slow wander that turns now and then and bounces off whatever it meets
+    for (const P of this.list) {
+      if (!P.aimless || P.awake || !P.mesh.visible) continue;
+      const q = P.mesh.position;
+      P.drift += (this.rnd() - 0.5) * 0.8 * dt;
+      const nx = q.x + Math.sin(P.drift) * P.dv * dt, nz = q.z + Math.cos(P.drift) * P.dv * dt;
+      if (wallAt(W, nx, nz, q.y - P.h, P.r, 0.3, P.h * 2) || Math.hypot(nx - P.home.x, nz - P.home.z) > 30) P.drift += Math.PI * (0.6 + this.rnd() * 0.8);
+      else { q.x = nx; q.z = nz; const g = groundAt(W, q.x, q.z, q.y - P.h + 0.3); if (g) q.y = g.h + P.h; P.mesh.rotation.y = P.drift; }
+    }
+    for (const l of this.leaves) {
+      if (!l.visible) continue;
+      const u = l.userData; u.t += dt;
+      if (l.position.y > 0.08) { u.v.y = Math.max(u.v.y - 9 * dt, -1.6); u.v.x *= Math.exp(-1.5 * dt); u.v.z *= Math.exp(-1.5 * dt); l.position.addScaledVector(u.v, dt); l.rotation.x += u.w.x * dt; l.rotation.y += u.w.y * dt; }
+      else { l.position.y = 0.07; l.rotation.set(-Math.PI / 2, 0, l.rotation.z); }
+      if (u.t > 14) l.visible = false;
+    }
+    for (const G of this.geysers) { // ~12 s of a burst main: a wobbling column and a rain of drops
+      G.t += dt; const k = G.t < 10 ? 1 : Math.max(0, 1 - (G.t - 10) / 2), h = 5.5 * k * (0.9 + Math.sin(G.t * 9) * 0.1);
+      G.col.visible = k > 0; G.col.scale.set(1 + Math.sin(G.t * 13) * 0.15, Math.max(0.01, h), 1); G.col.position.y = G.y + h / 2;
+      for (G.acc += dt * 60 * k; G.acc >= 1; G.acc--) { const d = this.drops[this.dropI++ % this.drops.length], u = d.userData; d.visible = true; d.position.set(G.x, G.y + h * (0.7 + this.rnd() * 0.3), G.z); u.v.set((this.rnd() - 0.5) * 5, 1 + this.rnd() * 3, (this.rnd() - 0.5) * 5); u.t = 0; }
+    }
+    for (const d of this.drops) {
+      if (!d.visible) continue;
+      const u = d.userData; u.t += dt; u.v.y -= GRAV * dt; d.position.addScaledVector(u.v, dt);
+      if (d.position.y < 0.05 || u.t > 2) d.visible = false;
+    }
     for (const s of this.shards) {
       if (!s.visible) continue;
       const u = s.userData; u.t += dt;
@@ -167,6 +241,9 @@ export class Props {
     for (const P of this.list) { if (P.pooled) { P.mesh.visible = false; P.awake = false; continue; } P.mesh.visible = true; P.mesh.position.set(P.home.x, P.home.y, P.home.z); P.mesh.rotation.set(0, P.home.ry, 0); P.v.set(0, 0, 0); P.w.set(0, 0, 0); P.awake = false; }
     for (const G of this.glass) { G.broken = false; G.plat.ghost = false; G.mesh.visible = true; }
     for (const s of this.shards) s.visible = false;
+    for (const P of this.list) { P.flat = false; P.burst = false; P.mesh.scale.set(1, 1, 1); }
+    for (const G of this.geysers) this.scene.remove(G.col);
+    this.geysers.length = 0; for (const a of [this.leaves, this.drops]) for (const m of a) m.visible = false;
   }
 }
 // How upright a prop is (1 standing, 0 on its side): a fallen bin lies lower than a standing one.

@@ -1,4 +1,4 @@
-# Suburban Turismo — art direction (phase 1: the style test)
+# Suburban Turismo — art direction
 
 > **The pitch.** A late-90s console racer about the suburbs, played completely straight by the art and
 > completely unhinged by the rules. It should look like a lost 1999 PlayStation disc you'd rent from Blockbuster —
@@ -118,6 +118,7 @@ obstacle on purpose. The **Routes** tab shows them from overhead; in Drive, `T` 
 | 3 | Black Friday | 0.43 km | in through CityMart's west glass, down the action alley, out the east glass, a lap of the parking field |
 | 4 | Mall Crawl | 0.38 km | the plaza, through Spenser's window and out the loading door, the service lane, back through Bed, Bath & Bewildered |
 | 5 | Maple Parkway Grand Prix | 1.10 km | a lap of the whole town, CityMart and the woods included |
+| 6 | The Last Run (final level) | 1.6 km, one run | every location in order, ending through Sharper Imagery's front window at the mall; seven police cruisers (black-and-white, flashing light bars with glow) chase and ram, roadblocks of parked cruisers on the way. The Blues Brothers mall chase is the reference |
 
 ## 8. Things you can hit (`js/props.js`)
 
@@ -131,6 +132,8 @@ a bounce off walls, then it settles where it lands.
   Spenser's Gifts, Sharper Imagery) shatter into shards (with a *SMASH!*) when you hit them above a walking pace; below
   that they're a wall.
 - **Shelves:** crash into a gondola and its stock comes off the shelf in a spray of products.
+- **Bushes and hedges** go flat under you in a spray of leaves (and cost a little speed); **fire hydrants** pop off
+  and blow a wobbling water column with a rain of drops for ~12 s; **stray carts** wander the lots on their own.
 - `R` puts everything back.
 
 The pedestrian ragdolls (phase 2) will use the same impulse code on the rig's joints.
