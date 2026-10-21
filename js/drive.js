@@ -99,7 +99,8 @@ export function driveStep(W, B, ctl, dt, ev = null) {
   if (B.crashT > 0) B.crashT = Math.max(0, B.crashT - dt);
 
   // --- steering: an absolute target from the stick, or relative from the keys (Dr. Mow)
-  const yawK = H.YAW_FULL > 0 ? clamp(Math.abs(B.speed) / H.YAW_FULL, H.YAW_LOW, 1) : 1; // (a car needs to roll to turn)
+  const yawK = (H.YAW_FULL > 0 ? clamp(Math.abs(B.speed) / H.YAW_FULL, H.YAW_LOW, 1) : 1) // (a car needs to roll to turn)
+    * (H.UNDERSTEER ? 1 - H.UNDERSTEER * clamp(Math.abs(B.speed) / H.CRUISE, 0, 1) ** 2 : 1); // (and pushes wide at speed)
   let slow = 0, throttle = H.AUTO_CRUISE ? 1 : 0;
   B.turnErr = 0;
   const h0 = B.heading;
@@ -112,7 +113,8 @@ export function driveStep(W, B, ctl, dt, ev = null) {
     B.turnErr = err;
     slow = H.TURN_SLOW * smooth(0.5, 1.8, Math.abs(err)); // the stick far off the heading: dig in (tightens the turn)
     throttle = H.THROTTLE_MIN + (1 - H.THROTTLE_MIN) * smooth(H.STICK_MIN, 0.85, mag);
-  } else if (ctl.turn || ctl.throttle) {
+  } else if (ctl.turn || ctl.throttle || B.wheel) {
+    if (H.STEER_LAG) { B.wheel = damp(B.wheel || 0, ctl.turn || 0, H.STEER_LAG, dt); if (Math.abs(B.wheel) < 0.01 && !ctl.turn) B.wheel = 0; ctl = { ...ctl, turn: B.wheel }; } // (the wheel winds on, and back)
     const back = (ctl.throttle || 0) < 0 && B.speed < 0.5 ? -1 : 1; // (backing up: the wheel steers the tail)
     B.heading = wrapAngle(B.heading - (ctl.turn || 0) * H.KEY_YAW * auth * yawK * back * dt);
     B.turnErr = -(ctl.turn || 0);
@@ -123,6 +125,10 @@ export function driveStep(W, B, ctl, dt, ev = null) {
   // Turning swings the body's circles round its middle: a car's nose can't swing into a wall (the turn waits
   // until you've rolled clear). Dr. Mow's mower was one point, so it never had to ask.
   if (B.heading !== h0) { const h1 = B.heading; B.heading = h0; const fl = circleFloors(W, B), before = penAt(W, B, B.x, B.z, fl); B.heading = h1; const after = penAt(W, B, B.x, B.z, fl); if (after > before + 0.06 && after > 0.06) B.heading = h0; } // (a little slack: pivoting in a corner may brush a wall; the move below slides you clear)
+  if (H.WANDER && B.grounded && Math.abs(B.speed) > 3) { // a little life in the wheel: slow wander, more off the asphalt
+    B.age = (B.age || 0) + dt; const n = Math.sin(B.age * 1.3 + B.x * 0.05) + Math.sin(B.age * 3.1 + B.z * 0.07) * 0.6;
+    B.heading = wrapAngle(B.heading + n * (H.WANDER + H.BUMP * (B.offroad || 0)) * clamp(Math.abs(B.speed) / H.CRUISE, 0, 1) * dt);
+  }
   B.steer = wrapAngle(B.heading - h0) / dt; // (yaw rate this step: the renderer leans and steers the wheels with it)
   if (B.grounded) {
     const target = H.CRUISE * throttle * (1 - slow) * (B.plat?.slow ?? 1) * (B.boost ?? 1) * (B.pace ?? 1); // (boost: a smash lunge; pace: CPU dashers run slower)

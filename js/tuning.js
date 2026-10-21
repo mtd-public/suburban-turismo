@@ -51,8 +51,8 @@ export const HANDLING = {
     ...COMMON,
     name: 'car',
     CRUISE: 20,        // m/s (72 km/h): a 100 m city block in ~5 s, so a 300 m dash is a 20 s sprint
-    ACCEL: 1.25,       // 1/s: ~1.8 s to 90% of top speed — corners cost you something
-    BRAKE: 3.2,
+    ACCEL: 1.05,       // 1/s: ~2.2 s to 90% of top speed — corners cost you something (Suburban Turismo: a bit lazier)
+    BRAKE: 2.5,        // 1/s: family cars stop late (Dr. Mow's mower stopped on a dime)
     REVERSE: 0.3,
     THROTTLE_MIN: 0.5,
     AUTO_CRUISE: false,
@@ -71,6 +71,11 @@ export const HANDLING = {
     CIRCLES: [[1.15, 1.0], [0, 1.0], [-1.15, 1.0]], // a 4.3 m × 2 m hatchback as three circles (nose, middle, tail)
     WALL_MARGIN: 0.95,
     MASS: 4,           // a car shoves a cart aside; two cars shove evenly
+    // Suburban Turismo's clunk: a real-ish family car, not Dr. Mow's perfect toy controller
+    STEER_LAG: 4.5,    // 1/s the wheel winds toward the key / pad (a heavy rack: a flick takes ~0.3 s to bite)
+    UNDERSTEER: 0.35,  // share of the yaw lost at full cruise (it pushes wide at speed: lift off to turn in)
+    WANDER: 0.05,      // rad/s of slow wander at speed (worn bushings, a soft tyre; the road isn't a rail)
+    BUMP: 0.18,        // extra wander off the track (B.offroad, set by the race: lawns, kerbs, the verge)
     DROP_R: 5,         // m from the drop-off pad that counts as delivered (pull up to the curb)
   },
 };

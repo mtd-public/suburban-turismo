@@ -103,7 +103,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
   if (mode === 'race' && G.route.final) { // the last run: you on pole, seven cruisers behind, roadblocks ahead
     G.player = mk(new Racer(track, W, H, 0, { name: 'You' }), carKey);
     const cop = seg ? 'segway' : 'sedan', h = handlingFor(cop);
-    for (let slot = 2; slot < 9; slot++) mk(new Racer(track, W, h, slot, { cpu: true, name: COPS[slot - 2], skill: (H.CRUISE / h.CRUISE) * (0.9 + Math.random() * 0.07), lane: (Math.random() - 0.5) * 3 }), cop, seg ? null : 0x141418, 'police').chase = true;
+    for (let slot = 2; slot < 9; slot++) mk(new Racer(track, W, h, slot, { cpu: true, name: COPS[slot - 2], skill: (H.CRUISE / h.CRUISE) * (0.76 + Math.random() * 0.07), lane: (Math.random() - 0.5) * 3 }), cop, seg ? null : 0x141418, 'police').chase = true;
     for (const [fi, side, ang] of BLOCKS) { // parked across half the road: push through them, or go round
       const s = track.at(Math.round(fi * track.n)), r = new Racer(track, W, handlingFor('sedan'), 0, { cpu: true, name: 'Roadblock' });
       Object.assign(r.body, { x: s.x - s.tz * side * 2.6, z: s.z + s.tx * side * 2.6, heading: Math.atan2(s.tx, s.tz) + ang, speed: 0 }); r.body.vh = r.body.heading; r.parked = true;
@@ -115,7 +115,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
     const field = RIVALS.slice().sort(() => Math.random() - 0.5).slice(0, 5);
     for (let k = 0; k < 6; k++) {
       const f = k ? field[k - 1] : null, key = k ? (seg ? 'segway' : f.car) : carKey, h = k ? handlingFor(key) : H;
-      const r = mk(new Racer(track, W, h, 0, k ? { cpu: true, name: rivalName(f.who), skill: (H.CRUISE / h.CRUISE) * 0.92, lane: (Math.random() - 0.5) * 2 } : { name: 'You' }), key, k && !seg ? f.color : null);
+      const r = mk(new Racer(track, W, h, 0, k ? { cpu: true, name: rivalName(f.who), skill: (H.CRUISE / h.CRUISE) * 0.82, lane: (Math.random() - 0.5) * 2 } : { name: 'You' }), key, k && !seg ? f.color : null);
       const i = Math.round((k / 6) * track.n), s = track.at(i);
       Object.assign(r.body, { x: s.x, z: s.z, heading: Math.atan2(s.tx, s.tz), vh: Math.atan2(s.tx, s.tz) }); r.body.y = groundAt0(s.x, s.z); r.idx = i; r.c = 1;
       if (!k) G.player = r;
@@ -127,7 +127,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
     for (let slot = 0; slot < 6; slot++) {
       if (slot === playerSlot) { G.player = mk(new Racer(track, W, H, slot, { name: 'You' }), carKey); continue; }
       const f = field[k++], key = seg ? 'segway' : f.car, h = handlingFor(key);
-      const skill = (H.CRUISE / h.CRUISE) * (0.9 + Math.random() * 0.08) * (slot < playerSlot ? 0.97 : 1); // (matched to your car, so any car can win)
+      const skill = (H.CRUISE / h.CRUISE) * (0.84 + Math.random() * 0.07) * (slot < playerSlot ? 0.97 : 1); // (matched to your car, so any car can win)
       mk(new Racer(track, W, h, slot, { cpu: true, name: rivalName(f.who), skill, lane: (Math.random() - 0.5) * 3 }), key, seg ? null : f.color);
     }
   } else {
@@ -152,7 +152,7 @@ const proCache = new Map();
 function proGhost(rk, ck) {
   const k = `${rk}:${ck}`;
   if (proCache.has(k)) return proCache.get(k);
-  const ver = `${k}:${ROUTES.find((r) => r.key === rk).pts.flat().reduce((a, b) => a + b, 0).toFixed(1)}`; // (a changed circuit re-times its pro)
+  const ver = `h2:${k}:${ROUTES.find((r) => r.key === rk).pts.flat().reduce((a, b) => a + b, 0).toFixed(1)}`; // (a changed circuit re-times its pro)
   let g = store.get(`pro:${k}`); if (g && g.ver !== ver) g = null;
   if (!g || !g.f) { g = simulatePro(new Track(ROUTES.find((r) => r.key === rk)), W, handlingFor(ck), town.glass.map((x) => x.plat)); g.ver = ver; store.set(`pro:${k}`, g); }
   proCache.set(k, g);
@@ -240,7 +240,7 @@ function raceStep(dt, inp) {
       const ev = r.ev; ev.length = 0;
       const ctl = r.dead ? { throttle: 0 } : r === P ? ctlP : r.chase ? copControl(r, P) : G.mode === 'combat' ? combat.cpu(r, DT) : cpuControl(r, G.racers, G.t, DT);
       driveStep(W, r.body, ctl, DT, ev);
-      r.progress(G.t);
+      r.progress(G.t); r.body.offroad = r.off > 6 ? 1 : 0;
       for (const e of ev) if (e.type === 'crash') {
         const B = r.body, fx = Math.sin(B.heading), fz = Math.cos(B.heading), L = VEHICLES[r.key].len / 2 + 0.6, hit = wallAt(W, B.x + fx * L, B.z + fz * L, B.y, 0.8, 0.4, 1.6);
         if (hit?.shelf) props.spill(B.x + fx * L, B.y, B.z + fz * L, fx, fz, e.v);
@@ -275,7 +275,7 @@ function copControl(r, P) {
     const d = Math.hypot(PB.x - B.x, PB.z - B.z);
     if (d < 26 && r.prog <= P.prog + 0.004) {
       const lead = clamp(d / 30, 0.15, 0.6), tx = PB.x + Math.sin(PB.vh) * PB.speed * lead, tz = PB.z + Math.cos(PB.vh) * PB.speed * lead, dd = Math.hypot(tx - B.x, tz - B.z) || 1;
-      ctl.dir = { x: (tx - B.x) / dd, z: (tz - B.z) / dd, mag: 1 }; B.pace = Math.max(B.pace, r.skill * 1.05);
+      ctl.dir = { x: (tx - B.x) / dd, z: (tz - B.z) / dd, mag: 1 }; B.pace = Math.max(B.pace, r.skill * 0.98);
     }
   }
   return ctl;
