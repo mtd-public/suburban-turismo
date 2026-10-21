@@ -109,11 +109,9 @@ with a hairline gold border, Georgia serif.
 - `touch-zoom-guard/` — the template kit.
 - three.js r160 vendored, import map, no build step (Dr. Mow / store-smash convention).
 
-## 9. Open questions for the style review
+## 9. Style review: decisions
 
 1. ~~PS1 dose~~ — decided: 240p with full wobble (the defaults below).
-   (360p, less wobble)?
 2. ~~Time of day~~ — decided: Autumn afternoon by default, Golden hour as an option.
 3. ~~People~~ — decided: rounder (8-sided trunks, 6-sided limbs, sphere heads with wrap textures, hair caps).
-   polys), still low-poly.
 4. ~~Car paint~~ — decided: realistic period colours.
