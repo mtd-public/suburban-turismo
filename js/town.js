@@ -12,6 +12,7 @@ import * as T from './tex.js';
 import { OFF1, OFF2, tbox, baseBox, patch, disc, ring, line, decal, tree, mergeStatic } from './geo.js';
 import { buildVehicle } from './cars.js';
 import { mulberry32 } from './utils.js';
+import { onTrack } from './routes.js';
 
 const ROAD_HW = 7, KERB = 0.15;
 
@@ -116,6 +117,7 @@ export function buildTown() {
   const CAR_COLS = [0x8a1e1e, 0x2a3a5a, 0xb8b8b4, 0x1c1c20, 0xe4e2dc, 0x4a5a3a, 0x7a6a50, 0x5a6a7a];
   const CAR_KEYS = ['sedan', 'sedan', 'minivan', 'hybrid', 'luxury', 'sedan'];
   function parkedCar(x, z, ry, key = CAR_KEYS[rnd() * CAR_KEYS.length | 0], color = CAR_COLS[rnd() * CAR_COLS.length | 0]) {
+    if (onTrack(x, z, 1)) return; // (the circuits run through the lots)
     const c = buildVehicle(key, { color, plate: ['8KJ 221', 'WGN 4LF', 'BRB 909', 'MOM TAXI', 'LTE 2PTY'][rnd() * 5 | 0] });
     c.position.set(x, 0, z); c.rotation.y = ry; add(c);
     const s = c.userData.spec; solidRot(x, z, s.width, s.len, ry, 1.5);
@@ -287,7 +289,7 @@ export function buildTown() {
     for (let i = 0; i < 46; i++) {
       const x = -180 + rnd() * 110, z = 14 + rnd() * 100;
       if (Math.hypot(x - cx, z - 78) < 30 && Math.hypot(x - cx, z - 78) > 13 && rnd() < 0.6) continue;
-      if (x < -138 && z > 88) continue; if (Math.hypot(x + 152, z - 56) < 11) continue; if (x > -142 && x < -94 && z < 46) continue;
+      if (x < -138 && z > 88) continue; if (onTrack(x, z)) continue; if (Math.hypot(x + 152, z - 56) < 11) continue; if (x > -142 && x < -94 && z < 46) continue;
       add(tree(x, z, 1.0 + rnd() * 0.5, (rnd() * 6 | 0) + 1, T.FALL[rnd() * 7 | 0])); post(x, z, 0.3);
       add(leafScatter(x, z, 3 + rnd() * 2));
     }
@@ -355,16 +357,46 @@ export function buildTown() {
       ['Bath & Bodyworks-ish', '#e8e4dc', '#2a3a6a', 0xd4c8b8], ['Sharper Imagery', '#1a1a1a', '#c8c8c8', 0xb8b0a4], ['Cinnamon Swirl', '#7a3a1a', '#f6e0b0', 0xd8c4a4],
     ];
     const sw = 18, sx0 = 60 - (shops.length * sw) / 2 + sw / 2, fz = 74, sh = 8.5;
+    // four of the shops are hollow: smash the front window, drive through, leave by the loading door at the back
+    const HOLLOW = { 0: 'home', 2: 'apparel', 5: 'gifts', 7: 'tech' };
+    const ceilM = basic(0xe0e0dc, T.ceiling()), floorM = lam(0xc8c2b4, T.storeFloor()), innerM = lam(0xd8d2c8, T.storeWall()), coM = lam(0xffffff, T.checkout()), strip = basic(0xf4f6f2);
     shops.forEach(([name, bg, fg, wallc], i) => {
-      const x = sx0 + i * sw, wall = lam(0xffffff, T.stucco(wallc)), h = sh + (i % 3 === 1 ? 2 : 0);
-      add(baseBox(sw, h, 16, wall, 3, x, KERB, fz + 8)); solid(x, fz + 8, sw, 16, h);
+      const x = sx0 + i * sw, wall = lam(0xffffff, T.stucco(wallc)), h = sh + (i % 3 === 1 ? 2 : 0), kind = HOLLOW[i];
+      if (!kind) { add(baseBox(sw, h, 16, wall, 3, x, KERB, fz + 8)); solid(x, fz + 8, sw, 16, h); }
+      else hollowShop(x, h, wall, kind, i);
       add(baseBox(sw + 0.1, 0.5, 0.4, lam(0xffffff, T.stucco(0xe8e0d0)), 2, x, h - 0.2 + KERB, fz + 0.1)); // cornice
-      add(decal(sw - 2, 3.4, lam(0xffffff, T.storefront([36 + i * 3, 40, 46])), x, 2.0, fz - 0.02, Math.PI));
+      if (!kind) add(decal(sw - 2, 3.4, lam(0xffffff, T.storefront([36 + i * 3, 40, 46])), x, 2.0, fz - 0.02, Math.PI));
       add(decal(sw - 2, 2.6, lam(0xffffff, T.upperWindows()), x, 7.0, fz - 0.02, Math.PI));
       add(decal(sw - 4, 1.2, lam(0xffffff, T.sign(name, { w: 128, h: 20, bg, fg, font: `bold ${name.length > 16 ? 11 : 14}px ${i % 2 ? 'Georgia, serif' : 'Arial, sans-serif'}` })), x, 5.1, fz - 0.05, Math.PI));
       // an awning on every other shop
       if (i % 2 === 0) { const aw = baseBox(sw - 3, 0.1, 1.8, lam([0x7a2a24, 0x2a4a3a, 0x3a3a5a][i % 3], T.grit()), null, x, 3.5, fz - 0.9); aw.rotation.x = -0.25; add(aw); }
     });
+    function hollowShop(x, h, wall, kind, i) {
+      const zc = fz + 8, wl = (w, d, wx, wz, y0 = 0, hh = h, m = wall) => { add(baseBox(w, hh, d, m, 3, wx, KERB + y0, wz)); if (y0 < 2) solid(wx, wz, w, d, hh + KERB); };
+      for (const s of [-1, 1]) {
+        wl(0.4, 16, x + s * 8.8, zc, 0, h, [innerM, innerM, M.slab, M.slab, wall, wall].map((m, k) => (k === (s < 0 ? 1 : 0) ? wall : m))); // party walls
+        wl(1.0, 0.4, x + s * 8.5, fz + 0.2); // front piers
+        wl(6, 0.4, x + s * 6, fz + 15.8); // back wall either side of the loading door
+      }
+      wl(16, 0.4, x, fz + 0.2, 4.4, h - 4.4); wl(6, 0.4, x, fz + 15.8, 4.2, h - 4.2);
+      add(baseBox(6, 0.6, 0.6, lam(0xffffff, T.garageDoor()), null, x, KERB + 3.6, fz + 15.4)); // the roll-up, rolled up
+      add(baseBox(sw, 0.4, 16, [wall, wall, M.slab, ceilM, wall, wall], [3, 3, 3, 6, 3, 3], x, KERB + h - 0.4, zc));
+      add(baseBox(sw - 0.8, KERB, 15.2, [M.kerb, M.kerb, floorM, M.kerb, M.kerb, M.kerb], [2, 2, 3, 2, 2, 2], x, 0, zc)); solid(x, zc, sw - 0.8, 15.2, KERB);
+      for (const z of [fz + 4, fz + 9, fz + 13]) for (const s of [-1, 1]) add(baseBox(3.6, 0.06, 0.35, strip, null, x + s * 4, KERB + h - 0.7, z));
+      const pane = new THREE.Mesh(new THREE.BoxGeometry(16, 4.2, 0.1), lam(0xffffff, T.storefront([36 + i * 3, 40, 46]), { transparent: true, opacity: 0.82 }));
+      pane.position.set(x, KERB + 2.1, fz + 0.2); glass.push({ mesh: pane, plat: { x, z: fz + 0.2, w: 16, d: 0.4, h: 4.4, thick: 4.4 } });
+      // fixtures down both sides, a clear run up the middle, the till at the back
+      const gond = (gx, kindS, len = 10) => { const sm = lam(0xffffff, T.shelfStock(kindS)); add(baseBox(1.3, 1.9, len, [sm, sm, M.slab, M.slab, sm, sm], [2, 2, 1, 1, 1.3, 1.3], gx, KERB, zc)); solid(gx, zc, 1.3, len, 2.05); plats[plats.length - 1].shelf = true; };
+      add(baseBox(4, 1.1, 1, [coM, coM, M.slab, M.slab, coM, coM], 2, x + 5.5, KERB, fz + 13.6)); solid(x + 5.5, fz + 13.6, 4, 1, 1.25);
+      if (kind === 'home') { gond(x - 6, 'gm'); gond(x + 6, 'paper', 8); for (let k = 0; k < 4; k++) dyn.push(['boxes', x - 3.5 + (k % 2) * 7, fz + 4 + (k >> 1) * 6, rnd()]); dyn.push(['cart', x + 2, fz + 3, 2.6]); dyn.push(['cart', x - 2.5, fz + 11, 0.4]); }
+      else if (kind === 'apparel') { for (let k = 0; k < 4; k++) { const rx = x + (k % 2 ? 5.5 : -5.5), rz = fz + 4 + (k >> 1) * 6; const r = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.75, 1.0, 8, 1, true), lam([0x2a4a6a, 0xc8a86a, 0x7a2a3a, 0x4a6a4a][k], T.grit(40), { side: THREE.DoubleSide })); r.position.set(rx, KERB + 0.9, rz); add(r); add(baseBox(0.08, 1.5, 0.08, M.pole, null, rx, KERB, rz)); post(rx, rz, 0.8, 1.5); } for (let k = 0; k < 5; k++) dyn.push(['mannequin', x - 3 + k * 1.5, fz + 2.2, Math.PI + (rnd() - 0.5) * 0.4]); }
+      else if (kind === 'gifts') { gond(x - 6, 'toys'); gond(x + 6, 'toys', 8); for (let k = 0; k < 3; k++) dyn.push(['boxes', x - 2 + k * 2, fz + 7 + k * 2, rnd()]); dyn.push(['mannequin', x + 2.5, fz + 2, Math.PI]); dyn.push(['soda', x - 3, fz + 12]); }
+      else { gond(x - 6, 'gm'); const tv = lam(0xffffff, T.tvWall()); add(baseBox(1.0, 2.6, 12, [tv, tv, M.slab, M.slab, M.kerb, M.kerb], [1, 4, 1, 1, 1, 1], x + 8.1, KERB, zc - 1)); for (let k = 0; k < 4; k++) dyn.push(['boxes', x + (k % 2 ? 4 : -3.5), fz + 4 + (k >> 1) * 5, rnd()]); }
+    }
+    // the service lane behind the shops, with the bins and pallets, and lanes down both ends back to the lot
+    add(patch(-30, fz + 16, 150, fz + 27, M.asphalt, 5, 0.03));
+    for (const [a, b] of [[-30, -22], [142, 150]]) add(patch(a, ROAD_HW + 5, b, fz + 16, M.asphalt, 5, 0.03));
+    for (const dx of [6, 42, 96, 132]) { add(baseBox(3.6, 1.6, 1.8, lam(0x2e4a36, T.grit()), null, dx, 0, fz + 17.2)); solid(dx, fz + 17.2, 3.6, 1.8, 1.6); dyn.push(['boxes', dx + 3, fz + 17.4, rnd()]); }
     // the colonnade and the street furniture
     for (let x = -18; x <= 138; x += 9) { add(baseBox(0.45, 3.6, 0.45, lam(0xffffff, T.stucco(0xe0d8c8)), 1, x, KERB, 64)); post(x, 64, 0.35, 4); }
     add(baseBox(164, 0.4, 3.2, lam(0xffffff, T.stucco(0xe0d8c8)), 2, 60, 3.75, 65.6));
@@ -480,18 +512,18 @@ export function buildTown() {
   }
 
   // ------------------------------------------------------------ woods: autumn tree stands in the gaps between places
-  const clear = [[-262, -12, 262, 12], [-140, -84, -120, -12], [-150, -112, -110, -76], [-182, 12, -68, 118], [-42, -74, 24, -12], [-24, 12, 144, 94], [48, -162, 196, -12], [-168, -140, -92, -16]];
+  const clear = [[-262, -12, 262, 12], [-140, -84, -120, -12], [-150, -112, -110, -76], [-182, 12, -68, 118], [-42, -74, 24, -12], [-32, 12, 152, 104], [48, -162, 196, -12], [-168, -140, -92, -16]];
   const woods = (x0, z0, x1, z1, n) => {
     for (let i = 0; i < n; i++) {
       const x = x0 + rnd() * (x1 - x0), z = z0 + rnd() * (z1 - z0);
-      if (clear.some(([a, b, c, d]) => x > a - 2 && x < c + 2 && z > b - 2 && z < d + 2)) continue;
+      if (clear.some(([a, b, c, d]) => x > a - 2 && x < c + 2 && z > b - 2 && z < d + 2) || onTrack(x, z)) continue;
       add(tree(x, z, 1.0 + rnd() * 0.6, (rnd() * 6 | 0) + 1, T.FALL[rnd() * 7 | 0])); post(x, z, 0.3);
       if (rnd() < 0.5) add(leafScatter(x, z, 3 + rnd() * 2));
     }
   };
   woods(-250, -200, 250, -14, 420); woods(-250, 14, 250, 200, 300);
   // the cul-de-sac's own canopy: a ring of big trees behind the houses
-  for (let i = 0; i < 40; i++) { const a = rnd() * Math.PI * 2, r = 44 + rnd() * 14; const x = -130 + Math.cos(a) * r * 0.75, z = -80 + Math.sin(a) * r; if (z > -14) continue; add(tree(x, z, 1.3 + rnd() * 0.5, (rnd() * 6 | 0) + 1, T.FALL[rnd() * 6 | 0])); post(x, z, 0.3); }
+  for (let i = 0; i < 40; i++) { const a = rnd() * Math.PI * 2, r = 44 + rnd() * 14; const x = -130 + Math.cos(a) * r * 0.75, z = -80 + Math.sin(a) * r; if (z > -14 || onTrack(x, z)) continue; add(tree(x, z, 1.3 + rnd() * 0.5, (rnd() * 6 | 0) + 1, T.FALL[rnd() * 6 | 0])); post(x, z, 0.3); }
 
   // ------------------------------------------------------------ the horizon: a painted treeline ring
   const tl = new THREE.Mesh(new THREE.CylinderGeometry(330, 330, 40, 32, 1, true), basic(0xffffff, T.treeline(), { alphaTest: 0.5, side: THREE.BackSide, fog: false }));

@@ -3,12 +3,13 @@
 //   Garage     the five test vehicles on a turntable in the Promenade lot
 //   Cast       each suburban character, framed where they live
 //   Drive      take any of the five round the town (store-smash's controller, Driver-style chase cam and HUD)
+//   Routes     the race circuits from overhead, as a see-through layer over the town
 // Plus a PS1 panel: resolution, vertex jitter, affine warp, dither, fog and the time of day, so the dose of
 // "PS1" can be judged and tuned live.
 import * as THREE from 'three';
 import { PS1, PS1Renderer, basic } from './ps1.js';
 import * as T from './tex.js';
-import { FOLIAGE } from './geo.js';
+import { FOLIAGE, TREES } from './geo.js';
 import { buildTown, LOCATIONS } from './town.js';
 import { buildVehicle, poseVehicle, VEHICLES, VEHICLE_ORDER } from './cars.js';
 import { buildPerson, posePerson, CAST, CAST_ORDER } from './people.js';
@@ -19,6 +20,7 @@ import { Input } from './input.js';
 import { Props } from './props.js';
 import { wallAt } from './world.js';
 import { clamp, damp, lerp } from './utils.js';
+import { ROUTES, buildRouteLayer, routeLength, routeSamples } from './routes.js';
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -29,6 +31,8 @@ const R = new PS1Renderer(canvas);
 R.r.useLegacyLights = true; // (intensity 1 = full colour: the numbers below read like 1997's)
 const scene = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(55, 1, 0.5, 450);
+const ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 10, 900); // the Routes map: straight down, north up
+const viewCam = () => (mode === 'map' ? ocam : cam);
 const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.5), sun = new THREE.DirectionalLight(0xffffff, 1);
 scene.add(hemi, sun, sun.target);
 scene.fog = new THREE.Fog(0xcccccc, PS1.fogNear, PS1.fogFar);
@@ -66,6 +70,27 @@ for (const g of town.glass) { scene.add(g.mesh); props.addGlass(g.mesh, g.plat);
 props.onEvent = (type) => { if (type === 'glass') { hud.damage = Math.min(1, hud.damage + 0.05); flash('SMASH!'); } };
 let flashT = 0;
 function flash(t) { const el = $('#flash'); if (!el) return; el.textContent = t; el.classList.add('on'); flashT = 0.9; }
+// the race circuits: an overhead layer for the map, a ground-hugging one while driving (T steps through them)
+const mapLayers = ROUTES.map((r) => { const g = buildRouteLayer(r); g.visible = false; scene.add(g); return g; });
+const driveLayer = new THREE.Group(); scene.add(driveLayer); driveLayer.visible = false;
+for (const r of ROUTES) driveLayer.add(buildRouteLayer(r, { heightAt: (x, z) => groundAt(W, x, z, 0.5).h, opacity: 0.5 }));
+let showTrack = 0, ri = 0; // (showTrack: 0 off, k the k-th circuit)
+// for the map only: flat tree crowns, and grass to the edge of any framing
+const mapExtras = new THREE.Group(); mapExtras.visible = false; scene.add(mapExtras);
+{
+  const byMat = new Map();
+  for (const t of TREES) { const k = `${t.tone}|${t.seed}`; if (!byMat.has(k)) byMat.set(k, []); byMat.get(k).push(t); }
+  const dummy = new THREE.Object3D();
+  for (const list of byMat.values()) {
+    const m = new THREE.InstancedMesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), basic(0xffffff, T.foliage(list[0].tone, list[0].seed), { alphaTest: 0.5 }), list.length);
+    list.forEach((t, i) => { dummy.position.set(t.x, 6 * t.s, t.z); dummy.rotation.y = t.seed; dummy.scale.setScalar(7.5 * t.s); dummy.updateMatrix(); m.setMatrixAt(i, dummy.matrix); });
+    mapExtras.add(m);
+  }
+  const g = new THREE.Mesh(new THREE.PlaneGeometry(2000, 2000).rotateX(-Math.PI / 2), basic(0xffffff, T.grass(false, 0)));
+  g.material.map = g.material.map.clone(); g.material.map.repeat.set(250, 250); g.material.map.needsUpdate = true; g.position.y = -0.3; mapExtras.add(g);
+}
+const routeBox = (rs) => { let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity; for (const r of rs) for (const s of routeSamples(r, 6)) { x0 = Math.min(x0, s.x); x1 = Math.max(x1, s.x); z0 = Math.min(z0, s.z); z1 = Math.max(z1, s.z); } return { x0, x1, z0, z1 }; };
+const labels = $('#maplabels');
 const people = {};
 for (const k of CAST_ORDER) {
   if (k === 'dale') continue; // (Dale rides his Segway)
@@ -98,10 +123,11 @@ function tickPuffs(dt) { for (const s of puffs) if (s.visible) { const u = s.use
 void smokeM;
 
 // ------------------------------------------------------------------ modes
-let mode = ['tour', 'garage', 'cast', 'drive'].includes(params.get('mode')) ? params.get('mode') : 'tour';
+let mode = ['tour', 'garage', 'cast', 'drive', 'map'].includes(params.get('mode')) ? params.get('mode') : 'tour';
 let li = clamp(+params.get('i') || 0, 0, LOCATIONS.length - 1), camI = +params.get('cam') || 0, ci = 0, modeT = 0;
 if (mode === 'cast') ci = clamp(+params.get('i') || 0, 0, CAST_ORDER.length - 1);
 if (mode === 'garage') vi = clamp(+params.get('i') || vi, 0, VEHICLE_ORDER.length - 1);
+if (mode === 'map') ri = clamp(+params.get('i') || 0, 0, ROUTES.length);
 const hud = { damage: 0, complaints: 0 };
 const input = new Input(canvas);
 
@@ -113,6 +139,10 @@ function setMode(m) {
   if (m === 'garage' || m === 'drive') setVehicle(vi);
   else if (car) { scene.remove(car); car = null; }
   if (m !== 'drive') props.reset();
+  // the map is drawn sharp, unfogged and skyless; everything goes back when you leave it
+  if (m === 'map') { if (!R.mapSaved) R.mapSaved = { native: R.native }; R.native = true; scene.fog.near = 1e4; scene.fog.far = 2e4; }
+  else if (R.mapSaved) { R.native = R.mapSaved.native; R.mapSaved = null; applyLight(light); }
+  resize(); skyDome.visible = m !== 'map'; mapExtras.visible = m === 'map'; mapRoutes(); showDrive();
   if (m === 'drive') { Object.assign(body, { x: -60, y: 0, z: 3.5, heading: Math.PI / 2, vh: Math.PI / 2, speed: 0, vy: 0, grounded: true }); hud.damage = 0; hud.complaints = 0; camState.init = false; }
   caption();
 }
@@ -120,14 +150,25 @@ function step(d) {
   if (mode === 'tour') { camI++; if (camI >= LOCATIONS[li].cams.length || d < 0) { li = (li + d + LOCATIONS.length) % LOCATIONS.length; camI = 0; } }
   else if (mode === 'garage' || mode === 'drive') setVehicle(vi + d);
   else if (mode === 'cast') ci = (ci + d + CAST_ORDER.length) % CAST_ORDER.length;
+  else if (mode === 'map') { ri = (ri + d + ROUTES.length + 1) % (ROUTES.length + 1); mapRoutes(); }
   modeT = 0; caption();
 }
 function warp() { Object.assign(body, { x: 90, y: 0, z: -40, heading: Math.PI, vh: Math.PI, speed: 0, vy: 0, grounded: true }); camState.init = false; }
+// which circuits the map shows (ri 0 is all of them), and their name tags at the start lines
+function mapRoutes() {
+  mapLayers.forEach((g, k) => { g.visible = mode === 'map' && (ri === 0 || ri === k + 1); });
+  labels.innerHTML = mode !== 'map' ? '' : ROUTES.map((r, k) => (ri === 0 || ri === k + 1 ? `<div data-k="${k}" style="--c:${r.color}"><b>${k + 1}</b> ${r.name}<small>${(routeLength(r) / 1000).toFixed(2)} km</small></div>` : '')).join('');
+}
+function showDrive() { driveLayer.visible = mode === 'drive' && showTrack > 0; driveLayer.children.forEach((g, k) => { g.visible = k === showTrack - 1; }); }
 function caption() {
   let title = '', sub = '', blurb = '';
   if (mode === 'tour') { const L = LOCATIONS[li]; title = L.name; sub = `Location ${li + 1} of ${LOCATIONS.length} · view ${camI + 1}/${L.cams.length}`; blurb = L.blurb; }
-  else if (mode === 'garage' || mode === 'drive') { const S = VEHICLES[VEHICLE_ORDER[vi]]; title = S.name; sub = `${S.kind}${mode === 'drive' ? ' · driving' : ''}`; blurb = mode === 'drive' ? 'WASD / arrows or the stick to drive, Space to hop, ◀ ▶ to swap vehicles, G to jump to the CityMart lot, R to put everything back. The CityMart doors are glass.' : S.blurb; }
+  else if (mode === 'garage' || mode === 'drive') { const S = VEHICLES[VEHICLE_ORDER[vi]]; title = S.name; sub = `${S.kind}${mode === 'drive' ? ' · driving' : ''}`; blurb = mode === 'drive' ? 'WASD / arrows or the stick to drive, Space to hop, ◀ ▶ to swap vehicles, G to jump to the CityMart lot, R to put everything back, T to lay each race circuit on the road in turn. The CityMart doors and four of the Promenade shop windows are glass.' : S.blurb; }
   else if (mode === 'cast') { const C = CAST[CAST_ORDER[ci]]; title = C.name; sub = C.title; blurb = C.blurb; }
+  else if (mode === 'map') {
+    if (!ri) { title = 'Race circuits'; sub = `${ROUTES.length} circuits · overhead`; blurb = 'Racing lines laid over the town, not its streets: they take the road where it is fun and cut across lawns, lots, woods and through the shops where that is more fun. ▶ to look at each one; in Drive, T lays each one on the road.'; }
+    else { const r = ROUTES[ri - 1]; title = r.name; sub = `Circuit ${ri} of ${ROUTES.length} · ${(routeLength(r) / 1000).toFixed(2)} km · ${r.laps} laps`; blurb = r.blurb; }
+  }
   $('#cap-title').textContent = title; $('#cap-sub').textContent = sub; $('#cap-blurb').textContent = blurb;
 }
 
@@ -149,6 +190,21 @@ function cameraFor(dt) {
     const p = k === 'dale' ? dale : people[k], fy = p.position.y + (k === 'dale' ? 0.27 : 0);
     const a = s.ry + Math.sin(t * 0.3) * 0.35, r = 3.2;
     cam.position.set(p.position.x + Math.sin(a) * r, fy + 1.45, p.position.z + Math.cos(a) * r); cam.lookAt(p.position.x, fy + 1.05, p.position.z); cam.fov = 45;
+  } else if (mode === 'map') { // straight down over the circuit(s), framed above the caption
+    const b = routeBox(ri ? [ROUTES[ri - 1]] : ROUTES), pad = 14, a = innerWidth / innerHeight;
+    const w = b.x1 - b.x0 + pad * 2, d = b.z1 - b.z0 + pad * 2, capF = (innerHeight > 600 ? 150 : 190) / innerHeight, topF = 56 / innerHeight; // (room for the tabs and the caption)
+    const half = Math.max(d / 2 / (1 - capF - topF), w / 2 / a);
+    ocam.left = -half * a; ocam.right = half * a; ocam.top = half; ocam.bottom = -half;
+    const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2 + half * (capF - topF); // (centred in the space between them)
+    ocam.position.set(cx, 400, cz); ocam.up.set(0, 0, -1); ocam.lookAt(cx, 0, cz); ocam.updateProjectionMatrix();
+    const placed = [];
+    for (const el of labels.children) { // pinned to the start line, nudged down when two starts are close
+      const s = mapLayers[+el.dataset.k].userData.start, v = new THREE.Vector3(s.x, 0, s.z).project(ocam);
+      let x = (v.x + 1) / 2 * innerWidth, y = (1 - v.y) / 2 * innerHeight;
+      while (placed.some(([px, py]) => Math.abs(px - x) < 190 && Math.abs(py - y) < 24)) y += 26;
+      placed.push([x, y]); el.style.left = `${x}px`; el.style.top = `${y}px`;
+    }
+    return;
   } else if (mode === 'drive') { // Driver's chase cam: low, close, lagging the heading a little
     const S = VEHICLES[VEHICLE_ORDER[vi]], back = S.segway ? 3.6 : 6.5, up = S.segway ? 2.0 : 2.3;
     const fx = Math.sin(body.heading), fz = Math.cos(body.heading);
@@ -171,7 +227,7 @@ let acc = 0, last = performance.now(), time = 0;
 function frame(now) {
   const dt = Math.max(0, Math.min((now - last) / 1000, 1 / 20)); last = now; // (template rule 2: clamp at both ends)
   tick(dt);
-  R.render(scene, cam);
+  R.render(scene, viewCam());
   requestAnimationFrame(frame);
 }
 function tick(dt) {
@@ -240,6 +296,8 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyP') $('#panel').classList.toggle('open');
   if (e.code === 'KeyR' && mode === 'drive') props.reset();
   if (e.code === 'KeyG' && mode === 'drive') warp();
+  if (e.code === 'KeyT' && mode === 'drive') { showTrack = (showTrack + 1) % (ROUTES.length + 1); showDrive(); flash(showTrack ? ROUTES[showTrack - 1].name : 'Circuits off'); }
+  if (e.code === 'Digit5') setMode('map');
 });
 function resize() { const w = innerWidth, h = innerHeight; R.resize(w, h); cam.aspect = w / h; cam.updateProjectionMatrix(); }
 addEventListener('resize', resize);
@@ -252,4 +310,4 @@ $('#loading')?.remove();
 requestAnimationFrame(frame);
 
 // For the screenshot tool and the console.
-window.ART = { setMode, step, applyLight, tick, render: () => R.render(scene, cam), PS1, body, props, get mode() { return mode; }, warp, set: (m, i, c = 0) => { setMode(m); if (m === 'tour') { li = i; camI = c; } else if (m === 'cast') ci = i; else { setVehicle(i); } modeT = 2; caption(); }, scene };
+window.ART = { setMode, step, applyLight, tick, render: () => R.render(scene, viewCam()), PS1, body, props, get mode() { return mode; }, warp, set: (m, i, c = 0) => { setMode(m); if (m === 'tour') { li = i; camI = c; } else if (m === 'cast') ci = i; else if (m === 'map') { ri = i; mapRoutes(); } else { setVehicle(i); } modeT = 2; caption(); }, scene };

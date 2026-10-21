@@ -22,11 +22,12 @@ Open `http://localhost:8080`. No build step: three.js r160 is vendored and loade
 | Locations | a slow camera tour of each sample location (◀ ▶ step through views) |
 | Garage | the five test vehicles on a turntable |
 | Cast | each suburban character, framed where they live |
-| Drive | drive any of the five round the town: WASD / arrows / stick, Space hops, ◀ ▶ swaps vehicle, `G` jumps to the CityMart lot, `R` puts every knocked prop and broken pane back |
+| Drive | drive any of the five round the town: WASD / arrows / stick, Space hops, ◀ ▶ swaps vehicle, `G` jumps to the CityMart lot, `R` puts every knocked prop and broken pane back, `T` lays each race circuit on the road in turn |
+| Routes | the five race circuits from straight overhead, as a see-through layer (◀ ▶: all, then each one) |
 | PS1 ⚙ | the PS1 dose live: resolution, vertex jitter, affine warp, draw distance, dither, full-res compare, time of day |
 
-Keys: `1`–`4` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel. URL parameters for screenshots:
-`?mode=tour|garage|cast|drive&i=N&cam=N&light=autumn|golden|overcast|dusk&ps1=0&ui=0`.
+Keys: `1`–`5` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel. URL parameters for screenshots:
+`?mode=tour|garage|cast|drive|map&i=N&cam=N&light=autumn|golden|overcast|dusk&ps1=0&ui=0`.
 
 ## Layout
 
@@ -38,6 +39,7 @@ Keys: `1`–`4` switch tabs, `[` `]` (or `B` `N`) step, `P` opens the PS1 panel.
 | `js/cars.js` | the five vehicles (profile-extruded bodies, painted sides, decal lamps, rims) |
 | `js/people.js` | the cast: rig, painted faces and clothes, procedural poses |
 | `js/town.js` | the town: Maple Parkway and the five locations (CityMart is hollow and drivable), plus the collision world |
+| `js/routes.js` | the race circuits: waypoints, smooth closed racing lines, the see-through track layer, `onTrack` (keeps trees and parked cars off the line) |
 | `js/props.js` | things you can hit: loose props that tumble and settle, smashable glass, shelves that shed stock |
 | `js/main.js` | the viewer: modes, cameras, lighting presets, Driver-style HUD and minimap |
 | `js/drive.js`, `js/world.js`, `js/input.js`, `js/tuning.js`, `js/utils.js` | from store-smash (Dr. Mow's controller) |

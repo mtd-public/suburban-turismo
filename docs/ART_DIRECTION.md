@@ -91,7 +91,9 @@ One stretch of Maple Parkway with a sample of each location along it:
 - **McDaniel's** — brick box with a red mansard band, a burger on a pole (no arches), drive-thru lane round the
   back past the menu board and speaker to Window 2.
 - **The Promenade at Maple Creek** — the outdoor mall: colonnade, awnings, parody storefronts (Bed, Bath &
-  Bewildered; The Gap Year; Aberdeen & Finch…), a fountain plaza, planter trees.
+  Bewildered; The Gap Year; Aberdeen & Finch…), a fountain plaza, planter trees. Four of the shops are hollow: smash the window, drive through the fixtures
+  (housewares gondolas, apparel rounders and mannequins, novelty shelves, a TV wall) and out the open loading door to
+  a service lane with dumpsters behind the row, which loops back to the lot down both ends.
 - **CityMart** — a tilt-up box the size of a county, two vestibules, the big sign, a lot with light poles, cart
   corrals and islands, a garden centre behind chain-link, a propane cage and a BLOCKBOX kiosk. Nobody parks in
   front of the doors, so there's a straight run from the road to the glass.
@@ -101,7 +103,23 @@ One stretch of Maple Parkway with a sample of each location along it:
   picture, pharmacy at the back, hanging blue department signs, rows of fluorescent fixtures under a corrugated deck.
 - Between them: autumn woods, and a painted treeline ring on the horizon (with the water tower).
 
-## 7. Things you can hit (`js/props.js`)
+## 7. Race circuits (`js/routes.js`)
+
+The circuits are a race layout laid over the town, not its street plan. Each is a smooth closed racing line
+through a handful of waypoints, drawn as a see-through band (red-and-white kerb edges, chevrons, a chequered start)
+that takes the road where the road is good and cuts across lawns, lots, woods and through shops where that's more
+fun. Trees and parked cars are kept off the line; every other thing on it (carts, bins, glass, shelves) is an
+obstacle on purpose. The **Routes** tab shows them from overhead; in Drive, `T` lays each one on the ground.
+
+| # | Circuit | Length | Where it goes |
+|---|---|---|---|
+| 1 | Whispering Pines GP | 0.54 km | up the cul-de-sac, round the island tree, back down across the west lawns, over the parkway, round the duck pond |
+| 2 | Drive-Thru Derby | 0.31 km | tight: the drive-thru lane, Window 2, the dumpster pen, the far side of the lot, a blast on the parkway |
+| 3 | Black Friday | 0.43 km | in through CityMart's west glass, down the action alley, out the east glass, a lap of the parking field |
+| 4 | Mall Crawl | 0.38 km | the plaza, through Spenser's window and out the loading door, the service lane, back through Bed, Bath & Bewildered |
+| 5 | Maple Parkway Grand Prix | 1.10 km | a lap of the whole town, CityMart and the woods included |
+
+## 8. Things you can hit (`js/props.js`)
 
 Crashes are a reaction, not a simulation: every loose prop is one rigid body with a cheap impulse, gravity, spin and
 a bounce off walls, then it settles where it lands.
@@ -109,27 +127,28 @@ a bounce off walls, then it settles where it lands.
 - **Loose props:** shopping carts, wheelie bins, cones, pumpkins, leaf bags, news boxes, cardboard boxes, soda
   towers, produce bins, mannequins. Hit them and they fly, tumble and roll to a stop (weight decides how far: a
   pumpkin goes further than a bin).
-- **Glass:** the vestibule panes shatter into shards (with a *SMASH!*) when you hit them above a walking pace; below
+- **Glass:** CityMart's vestibule panes and the windows of four Promenade shops (Bed, Bath & Bewildered, The Gap Year,
+  Spenser's Gifts, Sharper Imagery) shatter into shards (with a *SMASH!*) when you hit them above a walking pace; below
   that they're a wall.
 - **Shelves:** crash into a gondola and its stock comes off the shelf in a spray of products.
 - `R` puts everything back.
 
 The pedestrian ragdolls (phase 2) will use the same impulse code on the rig's joints.
 
-## 8. HUD
+## 9. HUD
 
 Driver's: big yellow serif labels over thin bordered bars (**Damage**, **HOA Complaints** — drive on a verge and
 watch it climb), a wireframe minimap in a blue frame, tyre smoke when you slide. Menus are dark translucent slabs
 with a hairline gold border, Georgia serif.
 
-## 9. Reuse from the family
+## 10. Reuse from the family
 
 - `js/drive.js`, `js/world.js`, `js/utils.js`, `js/input.js`, `js/tuning.js` — store-smash's controller (itself
   Dr. Mow's mower step): the same body code drives all five vehicles with per-vehicle handling numbers.
 - `touch-zoom-guard/` — the template kit.
 - three.js r160 vendored, import map, no build step (Dr. Mow / store-smash convention).
 
-## 10. Style review: decisions
+## 11. Style review: decisions
 
 1. ~~PS1 dose~~ — decided: 240p with full wobble (the defaults below).
 2. ~~Time of day~~ — decided: Autumn afternoon by default, Golden hour as an option.
@@ -137,3 +156,5 @@ with a hairline gold border, Georgia serif.
 4. ~~Car paint~~ — decided: realistic period colours.
 5. ~~Shoulders~~ — decided: rounded and fitted to the torso.
 6. CityMart is drivable inside, through glass you can smash; props react to crashes.
+7. Four Promenade shops are drivable too: in through the window, out through the loading door to a service lane.
+8. Race circuits are a layout over the town, free to go off-road (proposed: the five above).

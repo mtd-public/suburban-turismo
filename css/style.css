@@ -57,3 +57,10 @@ body.noui #tabs, body.noui #caption, body.noui #panel { display: none !important
 /* a Driver-style banner for big moments (glass going through) */
 #flash { position: fixed; left: 0; right: 0; top: 34%; text-align: center; font: bold 44px Georgia, serif; color: var(--gold); text-shadow: 3px 3px 0 #000; opacity: 0; transform: scale(0.8); transition: opacity 0.15s, transform 0.15s; pointer-events: none; z-index: 2; }
 #flash.on { opacity: 1; transform: none; }
+
+/* the Routes map: a name tag pinned to each circuit's start line */
+#maplabels { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+#maplabels div { position: absolute; transform: translate(-50%, -130%); white-space: nowrap; font: bold 13px Georgia, serif; color: #f4ecd8; background: rgba(16, 20, 34, 0.82); border: 1px solid var(--c); border-left: 6px solid var(--c); padding: 3px 7px; text-shadow: 1px 1px 0 #000; }
+#maplabels b { color: var(--c); }
+#maplabels small { margin-left: 6px; font-weight: normal; opacity: 0.8; }
+@media (max-width: 600px) { #maplabels div { font-size: 10px; padding: 2px 5px; } }

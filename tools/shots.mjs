@@ -1,6 +1,6 @@
 // Screenshots of the art test: every location view, every vehicle, every cast member, a drive, and PS1 on/off.
 // Also fails on console errors and page scroll (template rule 10).
-// Usage: python3 -m http.server 4180 &  node tools/shots.mjs   (OUT=shots, BASE=http://localhost:4180/, ONLY=tour|garage|cast|drive|misc)
+// Usage: python3 -m http.server 4180 &  node tools/shots.mjs   (OUT=shots, BASE=http://localhost:4180/, ONLY=tour|garage|cast|drive|map|smash|misc)
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
@@ -35,7 +35,11 @@ if (want('drive')) {
   await shot(p, 'drive-0');
   await p.keyboard.down('KeyW'); await p.keyboard.down('KeyA'); await p.evaluate(() => { for (let i = 0; i < 70; i++) ART.tick(1 / 60); }); await p.keyboard.up('KeyA'); await p.keyboard.up('KeyW');
   await shot(p, 'drive-1');
+  for (let k = 0; k < 5; k++) await p.keyboard.press('KeyT'); // the Grand Prix laid on the road
+  await shot(p, 'drive-track');
+  await p.keyboard.press('KeyT');
 }
+if (want('map')) for (let i = 0; i < 6; i++) { await p.evaluate((i) => ART.set('map', i), i); await shot(p, `map-${i}`); }
 if (want('smash')) {
   // Through CityMart's left vestibule glass and down the main aisle; props must react and glass must break.
   await p.evaluate(() => { ART.set('drive', 0); ART.warp(); });
@@ -46,6 +50,14 @@ if (want('smash')) {
   await p.keyboard.up('KeyW');
   await p.evaluate(() => { for (let i = 0; i < 30; i++) ART.tick(1 / 60); });
   await shot(p, 'smash-6');
+  // the Promenade: through Spenser's window from the plaza, out the loading door onto the service lane
+  await p.evaluate(() => { ART.props.reset(); Object.assign(ART.body, { x: 76.5, y: 0, z: 46, heading: 0, vh: 0, speed: 0, vy: 0 }); });
+  await p.keyboard.down('KeyW');
+  for (let k = 0; k < 4; k++) { await p.evaluate(() => { for (let i = 0; i < 40; i++) ART.tick(1 / 60); }); await shot(p, `mall-${k}`); }
+  await p.keyboard.up('KeyW');
+  const mall = await p.evaluate(() => ({ ...ART.props.fx, z: ART.body.z }));
+  console.log('   mall', JSON.stringify(mall));
+  if (mall.z < 92) errors.push(`stuck in the Promenade shop at z=${mall.z.toFixed(1)}`);
   const fx = await p.evaluate(() => ({ ...ART.props.fx, z: ART.body.z, x: ART.body.x }));
   console.log('   fx', JSON.stringify(fx));
   if (!fx.smashed) errors.push('no glass smashed');

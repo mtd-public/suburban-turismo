@@ -74,8 +74,11 @@ export function decal(w, h, mat, x, y, z, ry = 0) {
 // Every crown material, so the time of day can tint them all.
 export const FOLIAGE = new Set();
 // The PS1 tree: a trunk and two crossed alpha-tested quads (plus a third, flat-ish one for volume from above).
+// Every tree planted, so the overhead map can draw crowns (the crossed quads vanish edge-on from straight above).
+export const TREES = [];
 export function tree(x, z, s = 1, seed = 1, tone = [70, 96, 46]) {
   const g = new THREE.Group();
+  TREES.push({ x, z, s, seed, tone });
   const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.12 * s, 0.18 * s, 3 * s, 5), lam(0xffffff, T.bark()));
   trunk.position.y = 1.5 * s; g.add(trunk);
   // crowns are pre-lit and unlit (as the era did): a Lambert double-sided quad goes black on its back face
