@@ -1,0 +1,55 @@
+/* Late-90s console menus: dark translucent slabs, a hairline border, serif yellow titles (Driver / GT). */
+:root { --ink: #f2ecd8; --gold: #e8d050; --slab: rgba(16, 22, 40, 0.78); --line: rgba(232, 208, 80, 0.55); }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #1a2238; color: var(--ink); font-family: Georgia, 'Times New Roman', serif; user-select: none; -webkit-user-select: none; overscroll-behavior: none; }
+#game { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; touch-action: none; image-rendering: pixelated; }
+button { font-family: inherit; cursor: pointer; touch-action: none; }
+
+#tabs { position: fixed; top: max(8px, env(safe-area-inset-top)); left: 8px; right: 8px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; z-index: 3; }
+#tabs .logo { font-weight: bold; letter-spacing: 2px; font-size: 15px; color: var(--gold); text-shadow: 2px 2px 0 #000; margin-right: 10px; }
+#tabs .logo i { font-style: italic; color: #fff; }
+#tabs .logo small { font-size: 10px; color: #c8c0a8; letter-spacing: 1px; font-style: italic; }
+#tabs button, #panel button { background: var(--slab); color: var(--ink); border: 1px solid var(--line); padding: 6px 12px; font-size: 14px; }
+#tabs button.on, #panel button.on { background: var(--gold); color: #1a1a1a; }
+#tabs .ps1 { margin-left: auto; }
+
+#caption { position: fixed; left: 8px; right: 8px; bottom: max(8px, env(safe-area-inset-bottom)); display: flex; align-items: stretch; gap: 6px; max-width: 760px; z-index: 3; }
+#caption .txt { flex: 1; background: var(--slab); border: 1px solid var(--line); padding: 8px 12px; min-width: 0; }
+#caption h1 { margin: 0; font-size: 22px; color: var(--gold); text-shadow: 2px 2px 0 #000; font-weight: bold; }
+#caption h2 { margin: 2px 0 4px; font-size: 13px; font-style: italic; font-weight: normal; color: #c8c0a8; }
+#caption p { margin: 0; font-size: 14px; line-height: 1.35; }
+#caption > button { width: 44px; background: var(--slab); color: var(--gold); border: 1px solid var(--line); font-size: 18px; }
+
+#panel { position: fixed; top: 52px; right: 8px; width: 270px; background: var(--slab); border: 1px solid var(--line); padding: 10px 12px; display: none; z-index: 4; font-size: 13px; max-height: calc(100dvh - 70px); overflow: auto; }
+#panel.open { display: block; }
+#panel h3 { margin: 4px 0 8px; color: var(--gold); font-size: 15px; }
+#panel label { display: grid; grid-template-columns: 90px 1fr 46px; align-items: center; gap: 6px; margin: 6px 0; }
+#panel label.chk { display: flex; }
+#panel input[type=range] { width: 100%; touch-action: none; }
+#panel output { font-size: 12px; text-align: right; color: #c8c0a8; }
+#panel .lights { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+#panel .lights button { font-size: 12px; padding: 5px; }
+
+/* Driver's HUD: yellow serif labels over thin bordered bars, and the wire minimap */
+#drivehud, #minimap { display: none; }
+body[data-mode=drive] #drivehud { display: block; position: fixed; top: 52px; left: 12px; width: min(320px, 50vw); z-index: 2; pointer-events: none; }
+body[data-mode=drive] #minimap { display: block; position: fixed; right: 12px; bottom: 150px; width: 150px; height: 150px; z-index: 2; pointer-events: none; image-rendering: pixelated; }
+.bar { margin-bottom: 6px; }
+.bar label { display: block; font-weight: bold; font-size: 22px; color: var(--gold); text-shadow: 2px 2px 0 #000, -1px -1px 0 #3a3010; letter-spacing: 0.5px; }
+.bar .track { height: 14px; border: 2px solid rgba(220, 220, 230, 0.9); background: rgba(255, 255, 255, 0.25); }
+.bar .fill { height: 100%; width: 0; }
+.bar .dmg { background: #2fa040; } .bar .hoa { background: #b02424; }
+
+#loading { position: fixed; inset: 0; display: grid; place-content: center; text-align: center; background: #1a2238; z-index: 9; }
+#loading b { color: var(--gold); font-size: 28px; letter-spacing: 3px; }
+body.noui #tabs, body.noui #caption, body.noui #panel { display: none !important; }
+
+@media (max-width: 640px) {
+  #tabs .logo { width: 100%; font-size: 13px; }
+  #tabs button { padding: 5px 8px; font-size: 12px; }
+  #caption h1 { font-size: 17px; } #caption p { font-size: 12px; }
+  #panel { top: 84px; }
+  body[data-mode=drive] #drivehud { top: 84px; }
+  .bar label { font-size: 16px; }
+  body[data-mode=drive] #minimap { width: 100px; height: 100px; bottom: 140px; }
+}
