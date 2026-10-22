@@ -127,7 +127,6 @@ export function bump(W, a, b) {
       const ma = A.H.MASS || 4, mb = Bb.H.MASS || 4, side = (bx - Bb.x) * Math.cos(Bb.heading) - (bz - Bb.z) * Math.sin(Bb.heading); // (which side of b was hit)
       Bb.kx += nx * closing * 0.55 * ma / mb; Bb.kz += nz * closing * 0.55 * ma / mb; A.kx -= nx * closing * 0.25 * mb / ma; A.kz -= nz * closing * 0.25 * mb / ma;
       if (!b.parked) { Bb.heading += Math.sign(side || 1) * Math.min(0.9, closing * 0.035) * ma / mb; Bb.vh = Bb.heading - Math.sign(side || 1) * 0.3; }
-      if (closing > 12) { Bb.vy = Math.max(Bb.vy, closing * 0.22); Bb.grounded = false; Bb.plat = null; }
       A.speed *= 0.8;
     }
   }

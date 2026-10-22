@@ -56,7 +56,7 @@ export const HANDLING = {
     REVERSE: 0.3,
     THROTTLE_MIN: 0.5,
     AUTO_CRUISE: false,
-    YAW_GAIN: 6,       // a softer spring than the cart: a car leans into a turn
+    YAW_GAIN: 4.6,     // a softer spring than the cart: a car leans into a turn, and takes a moment to (weight)
     YAW_MAX: 2.7,      // rad/s: with TURN_SLOW the tightest turn is a ~4 m radius, a U-turn fits a 14 m street
     YAW_FULL: 7,       // m/s at which the steering has full authority…
     YAW_LOW: 0.3,      // …and 30% of it at a standstill: you can creep round in a garage, but not spin like a cart

@@ -428,6 +428,16 @@ export function poseVehicle(car, B, dt) {
   for (const w of u.wheels) { w.mesh.rotation.x = u.spin; if (w.front) w.pivot.rotation.y = Math.max(-0.5, Math.min(0.5, (B.steer || 0) * 0.25)); }
   u.acc = (u.acc || 0) * 0.9 + ((B.speed - (u.lastV ?? B.speed)) / Math.max(dt, 1e-4)) * 0.1; u.lastV = B.speed;
   if (u.key === 'segway') { u.body.rotation.x = Math.max(-0.25, Math.min(0.25, B.speed * 0.025 + u.acc * 0.03)); return; }
-  u.body.rotation.z = Math.max(-0.07, Math.min(0.07, -(B.steer || 0) * B.speed * 0.006));
-  u.body.rotation.x = Math.max(-0.04, Math.min(0.04, -u.acc * 0.006));
+  // Weight: the body sits on soft springs. It squats under power, dives under braking, rolls out of a corner,
+  // sinks on landing, and rocks hard on a hit (u.kick, from the crash code), settling with a slight wobble.
+  const s = u.sus ??= { r: 0, rv: 0, p: 0, pv: 0, h: 0, hv: 0, air: false };
+  const hd = B.heading ?? 0, dh = hd - (u.lastH ?? hd), yawRate = Math.atan2(Math.sin(dh), Math.cos(dh)) / Math.max(dt, 1e-4); u.lastH = hd;
+  const tr = Math.max(-0.09, Math.min(0.09, yawRate * B.speed * 0.0035)), tp = Math.max(-0.06, Math.min(0.08, -u.acc * 0.012));
+  if (B.grounded === false) s.air = true; else if (s.air) { s.air = false; s.hv -= Math.min(3, Math.abs(B.vy || 4) * 0.4); s.pv += 0.4; }
+  if (u.kick) { s.rv += u.kick.roll; s.pv += u.kick.pitch; s.hv -= u.kick.heave; u.kick = null; }
+  const K = 70, C = 7.5, h = Math.min(dt, 1 / 30);
+  s.rv += ((tr - s.r) * K - s.rv * C) * h; s.r += s.rv * h;
+  s.pv += ((tp - s.p) * K - s.pv * C) * h; s.p += s.pv * h;
+  s.hv += (-s.h * 90 - s.hv * 9) * h; s.h += s.hv * h;
+  u.body.rotation.z = Math.max(-0.22, Math.min(0.22, s.r)); u.body.rotation.x = Math.max(-0.16, Math.min(0.16, s.p)); u.body.position.y = Math.max(-0.14, Math.min(0.1, s.h));
 }
