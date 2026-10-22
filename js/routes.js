@@ -97,7 +97,7 @@ export function buildRouteLayer(r, { heightAt = null, y = 0.6, opacity = 0.75 } 
   const opts = { transparent: true, opacity, depthWrite: false, depthTest: !over, side: THREE.DoubleSide, fog: !over, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
   const grp = new THREE.Group(), band = new THREE.Mesh(g, basic(new THREE.Color(r.color).getHex(), BAND, opts));
   grp.add(band, new THREE.Mesh(g, basic(0xffffff, KERB, { ...opts, opacity: Math.min(1, opacity + 0.25) })));
-  grp.userData.band = band;
+  grp.userData.band = band; grp.userData.kerb = grp.children[1];
   // the start/finish line (an open run has a start line part way in, past the grid, and a finish at the end)
   const lineAt = (s) => { const line = new THREE.Mesh(new THREE.PlaneGeometry(TRACK_W, 2), basic(0xffffff, CHECK, { ...opts, opacity: 0.95 })); line.rotation.set(-Math.PI / 2, Math.atan2(s.tx, s.tz), 0, 'YXZ'); line.position.set(s.x, (over ? y : heightAt(s.x, s.z) + 0.07) + 0.01, s.z); grp.add(line); };
   const s = S[r.open ? OPEN_START : 0]; lineAt(s); if (r.open) lineAt(S[n - 3]);

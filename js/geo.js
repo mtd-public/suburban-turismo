@@ -129,6 +129,15 @@ export function mergeStatic(root) {
   }
   return out;
 }
+// A prop's parts merged into one mesh per material, in the prop's own space: it still moves as one, in fewer draws.
+export function mergeLocal(g) {
+  const keep = { p: g.position.clone(), q: g.quaternion.clone(), s: g.scale.clone() };
+  g.position.set(0, 0, 0); g.quaternion.identity(); g.scale.set(1, 1, 1);
+  const merged = mergeStatic(g);
+  g.position.copy(keep.p); g.quaternion.copy(keep.q); g.scale.copy(keep.s);
+  g.clear(); for (const m of [...merged.children]) g.add(m);
+  return g;
+}
 function sub(g, start, count) {
   const out = new THREE.BufferGeometry();
   for (const [k, a] of Object.entries(g.attributes)) out.setAttribute(k, new THREE.BufferAttribute(a.array.slice(start * a.itemSize, (start + count) * a.itemSize), a.itemSize));

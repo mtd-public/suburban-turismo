@@ -9,7 +9,7 @@
 //
 // The world (renderer, town, props, light) is js/stage.js, shared with the art test (viewer.html).
 import * as THREE from 'three';
-import { PS1, basic, ps1ify } from './ps1.js';
+import { PS1, U as PS1U, basic, ps1ify } from './ps1.js';
 import * as T from './tex.js';
 import { createStage, LIGHTS, handlingFor, buildMapExtras } from './stage.js';
 import { buildVehicle, poseVehicle, flashLights, carLights, VEHICLES, VEHICLE_ORDER } from './cars.js';
@@ -43,20 +43,59 @@ const ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 10, 900);
 const mirrorCam = new THREE.PerspectiveCamera(52, 3, 0.5, 260);
 const mapExtras = buildMapExtras(scene);
 const mapLayers = ROUTES.map((r) => { const g = buildRouteLayer(r); g.visible = false; scene.add(g); return g; });
-const trackLayers = ROUTES.map((r) => { const g = buildRouteLayer(r, { heightAt: (x, z) => groundAt0(x, z), opacity: 0.7 }); g.userData.band.material = g.userData.band.material.clone(); g.visible = false; scene.add(g); return g; });
+const trackLayers = ROUTES.map((r) => { const g = buildRouteLayer(r, { heightAt: (x, z) => groundAt0(x, z), opacity: 0.7 }); g.userData.band.material = g.userData.band.material.clone(); g.userData.kerb.material = g.userData.kerb.material.clone(); g.visible = false; scene.add(g); return g; });
+// Distance culling: props and people that would be under a pixel and a half at 240 lines, or lost in the fog, go to a
+// layer the camera doesn't draw (their own code owns .visible). Checked every few frames; the overhead map draws all.
+const cullList = [], CULL_LAYER = 3, box = new THREE.Box3(), sph = new THREE.Sphere();
+let cullI = 0;
+function buildCull() {
+  cullList.length = 0;
+  for (const o of [...props.list.map((P) => P.mesh), ...Object.values(people)]) { box.setFromObject(o); box.getBoundingSphere(sph); cullList.push({ o, r: Math.max(0.25, Number.isFinite(sph.radius) ? sph.radius : 1), off: false }); }
+}
+function cullStep(all) {
+  if (!cullList.length) buildCull();
+  if (!all && cullI++ % 4) return;
+  const c = cam.position, fog = scene.fog.far;
+  for (const e of cullList) {
+    const p = e.o.position, d = Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z), off = !all && (d > fog + e.r * 2 || d > e.r * 280);
+    if (off !== e.off) { e.off = off; e.o.traverse((m) => m.layers.set(off ? CULL_LAYER : 0)); }
+  }
+}
+
+// PS1 sprites: sprites and points snap to the low-res pixel grid like every other vertex (ps1ify covers the meshes),
+// and additive glows skip the fog (fogging an additive sprite brightens it toward the haze colour: a lit square).
+function ps1Sprites() {
+  scene.traverse((o) => {
+    if (!(o.isSprite || o.isPoints)) return;
+    const m = o.material; if (m.userData.ps1) return; m.userData.ps1 = true;
+    if (m.blending === THREE.AdditiveBlending) m.fog = false;
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.uSnap = PS1U.uSnap; sh.uniforms.uJitter = PS1U.uJitter;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nuniform vec2 uSnap; uniform float uJitter;')
+        .replace('#include <logdepthbuf_vertex>', 'if (gl_Position.w > 0.0) { vec2 n = gl_Position.xy / gl_Position.w; gl_Position.xy = mix(n, floor(n * uSnap * 0.5 + 0.5) / (uSnap * 0.5), uJitter) * gl_Position.w; }\n#include <logdepthbuf_vertex>');
+    };
+    m.customProgramCacheKey = () => 'ps1sprite'; m.needsUpdate = true;
+  });
+}
+
 // Compile every shader up front (smoke, sparks, wreckage, weapons, lights: all hidden until the first drift or crash),
 // so the first one doesn't hitch the frame.
 function warmShaders() {
+  ps1Sprites();
   const hidden = []; scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
   try { R.r.compile(scene, cam); } finally { for (const o of hidden) o.visible = false; }
 }
-const RIGHT_WAY = new THREE.Color(0x30e860), WRONG_WAY = new THREE.Color(0xff2a2a);
+const RIGHT_WAY = new THREE.Color(0x40d868), WRONG_WAY = new THREE.Color(0xf03030), tintTo = new THREE.Color();
 // The track under you: green going the right way round, red going the wrong way (by which way you're moving).
 function trackTint(dt) {
   const L = G.route && trackLayers[ROUTES.indexOf(G.route)], P = G.player; if (!L || !P) return;
   const B = P.body;
-  if (Math.abs(B.speed) > 1.2) G.wrongWay = Math.abs(wrapAngle(B.heading + (B.speed < 0 ? Math.PI : 0) - G.track.heading(P.idx))) > Math.PI / 2;
-  L.userData.band.material.color.lerp(G.wrongWay ? WRONG_WAY : RIGHT_WAY, Math.min(1, dt * 8));
+  if (G.mode === 'combat') G.wrongWay = false; // (no right way round in a death match)
+  else if (Math.abs(B.speed) > 1.2) G.wrongWay = Math.abs(wrapAngle(B.heading + (B.speed < 0 ? Math.PI : 0) - G.track.heading(P.idx))) > Math.PI / 2;
+  // (the band is unlit paint: dim it with the light, or it glows at night)
+  const lit = LIGHTS[light].night ? 0.42 : LIGHTS[light].lamps ? 0.6 : 1; L.userData.kerb.material.color.setScalar(lit);
+  tintTo.copy(G.wrongWay ? WRONG_WAY : RIGHT_WAY).multiplyScalar(lit);
+  L.userData.band.material.color.lerp(tintTo, Math.min(1, dt * 8));
 }
 function groundAt0(x, z) { let h = 0; for (const p of platsNear(W, x, z)) if (!p.ghost && contains(p, x, z) && p.h <= 0.5 && p.h > h) h = p.h; return h; }
 let light = params.get('light') in LIGHTS ? params.get('light') : (store.get('light') in LIGHTS ? store.get('light') : 'autumn');
@@ -66,7 +105,7 @@ const puffs = Array.from({ length: 110 }, () => { const s = new THREE.Sprite(new
 let puffI = 0;
 const puff = (x, y, z, o = {}) => { const s = puffs[puffI++ % puffs.length], u = s.userData; s.position.set(x, y, z); s.visible = true; u.t = 0; u.v = o.v ?? 0.6 + Math.random() * 0.6; u.life = o.life ?? 1.1; u.s0 = o.s0 ?? 0.8; u.grow = o.grow ?? 3; u.a = o.a ?? 0.65; u.vx = o.vx || 0; u.vz = o.vz || 0; s.material.color.setHex(o.color ?? 0xffffff); if (nightOn()) s.material.color.multiply(NIGHT_SMOKE); }; // (sprites aren't lit: dim them at night)
 const NIGHT_SMOKE = new THREE.Color(0x4a5268);
-const tickPuffs = (dt) => { for (const s of puffs) if (s.visible) { const u = s.userData; u.t += dt; const k = u.t / u.life; if (k >= 1) { s.visible = false; continue; } s.scale.setScalar(u.s0 + k * u.grow); s.position.y += u.v * dt; s.position.x += u.vx * dt; s.position.z += u.vz * dt; s.material.opacity = u.a * (1 - k); } };
+const tickPuffs = (dt) => { for (const s of puffs) if (s.visible) { const u = s.userData; u.t += dt; const k = u.t / u.life; if (k >= 1) { s.visible = false; continue; } s.scale.setScalar(u.s0 + k * u.grow); s.position.y += u.v * dt; s.position.x += u.vx * dt; s.position.z += u.vz * dt; s.material.opacity = u.a * (1 - k) * Math.min(1, Math.max(0, (s.position.distanceTo(cam.position) - 1.5) / 3)); } }; // (fades out right at the lens, where a puff would be a wall of big pixels)
 // weather, wreckage, the night headlamp, sound
 const snow = new Snowfall(scene); snow.on = T.WINTER;
 const wreck = new Wreckage(scene, W);
@@ -451,6 +490,7 @@ function render() {
     if (menu) { scene.fog.near = 1e4; scene.fog.far = 2e4; } else stage.applyLight(light);
   }
   mapLayers.forEach((g, k) => { g.visible = menu && ROUTES[k] === G.route; });
+  cullStep(menu);
   R.render(scene, menu ? ocam : cam);
   if (!menu && G.mirror > 0.02) {
     const w = Math.round(Math.min(440, innerWidth * 0.5)), h = Math.round(w * 0.3 * G.mirror), x = Math.round((innerWidth - w) / 2), y = 10;
@@ -618,4 +658,4 @@ $('#loading')?.remove();
 requestAnimationFrame(frame);
 
 // For the test tool and the console.
-window.GAME = { G, combat, startRace, tick, render, showMenu, standings, proGhost, props, get state() { return G.state; } };
+window.GAME = { G, R, scene, cam, people, combat, startRace, tick, render, showMenu, standings, proGhost, props, get state() { return G.state; } };

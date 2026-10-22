@@ -9,6 +9,7 @@ import * as T from './tex.js';
 import { grain } from './tex.js';
 import { groundAt, wallAt } from './world.js';
 import { circles } from './drive.js';
+import { mergeLocal } from './geo.js';
 
 const GRAV = 24; // m/s² (the controller's gravity: everything falls the same)
 const box = (w, h, d, mat, x = 0, y = 0, z = 0) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat); m.position.set(x, y, z); return m; };
@@ -97,7 +98,7 @@ export class Props {
     this.geysers = [];
   }
   spawn(kind, x, z, ry = 0, y = null) {
-    const { g, r, h, m } = BUILD[kind](this.rnd);
+    const { g, r, h, m } = BUILD[kind](this.rnd); mergeLocal(g); // (one draw per material, not per part)
     const gy = y ?? groundAt(this.W, x, z, 3).h;
     g.position.set(x, gy + h, z); g.rotation.y = ry; this.scene.add(g);
     const p = { kind, mesh: g, r, h, m, soft: kind === 'bush', hydrant: kind === 'hydrant', v: new THREE.Vector3(), w: new THREE.Vector3(), awake: false, home: { x, y: gy + h, z, ry } };
