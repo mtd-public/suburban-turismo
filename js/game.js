@@ -23,7 +23,7 @@ import { Controls } from './controls.js';
 import { createCombat, WEAPONS, COMBAT_TIME } from './combat.js';
 import { CarAudio } from './audio.js';
 import { Snowfall, Wreckage } from './fx.js';
-import { clamp, damp } from './utils.js';
+import { clamp, damp, wrapAngle } from './utils.js';
 
 const $ = (s) => document.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -43,7 +43,21 @@ const ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 10, 900);
 const mirrorCam = new THREE.PerspectiveCamera(52, 3, 0.5, 260);
 const mapExtras = buildMapExtras(scene);
 const mapLayers = ROUTES.map((r) => { const g = buildRouteLayer(r); g.visible = false; scene.add(g); return g; });
-const trackLayers = ROUTES.map((r) => { const g = buildRouteLayer(r, { heightAt: (x, z) => groundAt0(x, z), opacity: 0.45 }); g.visible = false; scene.add(g); return g; });
+const trackLayers = ROUTES.map((r) => { const g = buildRouteLayer(r, { heightAt: (x, z) => groundAt0(x, z), opacity: 0.7 }); g.userData.band.material = g.userData.band.material.clone(); g.visible = false; scene.add(g); return g; });
+// Compile every shader up front (smoke, sparks, wreckage, weapons, lights: all hidden until the first drift or crash),
+// so the first one doesn't hitch the frame.
+function warmShaders() {
+  const hidden = []; scene.traverse((o) => { if (!o.visible) { hidden.push(o); o.visible = true; } });
+  try { R.r.compile(scene, cam); } finally { for (const o of hidden) o.visible = false; }
+}
+const RIGHT_WAY = new THREE.Color(0x30e860), WRONG_WAY = new THREE.Color(0xff2a2a);
+// The track under you: green going the right way round, red going the wrong way (by which way you're moving).
+function trackTint(dt) {
+  const L = G.route && trackLayers[ROUTES.indexOf(G.route)], P = G.player; if (!L || !P) return;
+  const B = P.body;
+  if (Math.abs(B.speed) > 1.2) G.wrongWay = Math.abs(wrapAngle(B.heading + (B.speed < 0 ? Math.PI : 0) - G.track.heading(P.idx))) > Math.PI / 2;
+  L.userData.band.material.color.lerp(G.wrongWay ? WRONG_WAY : RIGHT_WAY, Math.min(1, dt * 8));
+}
 function groundAt0(x, z) { let h = 0; for (const p of platsNear(W, x, z)) if (!p.ghost && contains(p, x, z) && p.h <= 0.5 && p.h > h) h = p.h; return h; }
 let light = params.get('light') in LIGHTS ? params.get('light') : (store.get('light') in LIGHTS ? store.get('light') : 'autumn');
 
@@ -129,7 +143,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
   G.mode = mode; G.route = ROUTES.find((r) => r.key === routeKey) || ROUTES[0]; G.car = carKey;
   props.reset();
   const track = G.track = new Track(G.route);
-  trackLayers[ROUTES.indexOf(G.route)].visible = true;
+  trackLayers[ROUTES.indexOf(G.route)].visible = true; G.wrongWay = false; trackLayers[ROUTES.indexOf(G.route)].userData.band.material.color.copy(RIGHT_WAY);
   const H = handlingFor(carKey), seg = VEHICLES[carKey].segway;
   const mk = (r, key, color, livery) => { const m = buildVehicle(key, { ...(color != null ? { color } : {}), livery }); scene.add(m); G.meshes.push(m); r.mesh = m; r.key = key; r.paint = color ?? VEHICLES[key].color ?? 0x888888; r.len = VEHICLES[key].len; r.tall = VEHICLES[key].segway ? 2.3 : 1.9; G.racers.push(r); return r; };
   if (mode === 'race' && G.route.final) { // the last run: you on pole, seven cruisers behind, roadblocks ahead
@@ -175,7 +189,7 @@ function startRace(mode = G.mode, routeKey = G.route.key, carKey = G.car) {
   G.combatDone = false; G.haze = 0; document.body.classList.toggle('combat', mode === 'combat');
   G.t = 0; G.count = 3.6; G.acc = 0; G.state = 'countdown'; G.endT = 0; G.results = null; G.splits = [];
   camState.init = false;
-  showMenu(null); setHud(true);
+  showMenu(null); setHud(true); warmShaders(); // (the new cars, their lights and the weapons)
   msg('', 0);
 }
 
@@ -218,7 +232,6 @@ const standings = () => G.racers.slice().sort((a, b) => (a.finished && b.finishe
 let last = performance.now();
 function frame(now) {
   let dt = Math.max(0, Math.min((now - last) / 1000, 1 / 20)); last = now;
-  if (G.slowT > 0) { G.slowT -= dt; dt *= 0.3; } // (hit-stop: a big crash lands in slow motion for a beat)
   tick(dt);
   render();
   requestAnimationFrame(frame);
@@ -267,7 +280,7 @@ function raceStep(dt, inp) {
     G.drift = drift;
     ctlP = drift ? { turn: inp.steer, throttle: Math.max(0.78, inp.gas), jump: G.hop } : { turn: inp.steer, throttle: brake ? -inp.brake : inp.gas, jump: G.hop };
   }
-  G.hop = false; G.brakeK = inp.brake > 0.1 && PB.speed > 0.5 ? 1 : 0;
+  G.hop = false; G.brakeK = inp.brake > 0.1 && PB.speed > 0.5 ? 1 : 0; trackTint(dt);
   G.reversing = !P.finished && !G.auto && !ctlP.dir && ((ctlP.throttle < 0 && PB.speed < 0.6) || PB.speed < -0.4);
   while (G.acc >= DT) {
     G.acc -= DT; G.t += DT;
@@ -281,7 +294,7 @@ function raceStep(dt, inp) {
         if (hit?.shelf) props.spill(B.x + fx * L, B.y, B.z + fz * L, fx, fz, e.v);
         if (G.mode === 'combat' && e.v > 7) combat.hurt(r, (e.v - 5) * 0.5);
         smash(r, B.x + fx * (L - 0.4), B.y, B.z + fz * (L - 0.4), fx, fz, e.v, true);
-      } else if (e.type === 'scrape' && Math.random() < 0.5) { const B = r.body; wreck.spark(B.x, B.y + 0.4, B.z, (Math.random() - 0.5) * 4, 2, (Math.random() - 0.5) * 4); if (r === P || Math.random() < 0.3) sfxAt('scrape', B.x, B.z, 0.7); }
+      } else if (e.type === 'scrape' && G.t - (r.scrapeT || -1) > 0.08) { r.scrapeT = G.t; const B = r.body; wreck.spark(B.x, B.y + 0.4, B.z, (Math.random() - 0.5) * 4, 2, (Math.random() - 0.5) * 4); if (G.t - (r.scrapeSfx || -1) > 0.25) { r.scrapeSfx = G.t; sfxAt('scrape', B.x, B.z, 0.7); } } // (throttled: a scrape fires every physics step)
     }
     for (const b of G.blocks) { driveStep(W, b.body, { throttle: 0 }, DT, null); }
     const all = G.blocks.length ? [...G.racers, ...G.blocks] : G.racers;
@@ -295,7 +308,7 @@ function raceStep(dt, inp) {
   }
   // CPUs back on the road on their own; you get the R / Back / ↺ button (or this, if you're truly lost)
   if (P.off > 60 && !P.finished) P.respawn();
-  for (const r of G.racers) { const B = r.body, S = VEHICLES[r.key]; if (B.grounded && Math.abs(B.slip || 0) > 0.2 && Math.abs(B.speed) > 8 && Math.random() < 0.5) puff(B.x - Math.sin(B.heading) * S.len * 0.3, B.y + 0.3, B.z - Math.cos(B.heading) * S.len * 0.3); }
+  for (const r of G.racers) { const B = r.body, S = VEHICLES[r.key]; if (B.grounded && Math.abs(B.slip || 0) > 0.2 && Math.abs(B.speed) > 8 && G.t - (r.puffT || -1) > 0.07 && (r === P || near(B.x, B.z, 70))) (r.puffT = G.t), puff(B.x - Math.sin(B.heading) * S.len * 0.3, B.y + 0.3, B.z - Math.cos(B.heading) * S.len * 0.3); }
   if (G.mode === 'combat') { // the end: one car left, you're wrecked, or time's up
     if (!combat.over && G.t >= COMBAT_TIME) { combat.over = true; msg('TIME!', 2.5); }
     if (combat.over && G.endT <= 0 && !G.combatDone) { G.combatDone = true; G.endT = 2.8; if (!P.dead) msg(combat.standing()[0] === P ? 'LAST CAR STANDING!' : 'SURVIVED', 3, 'final'); }
@@ -307,7 +320,7 @@ function raceStep(dt, inp) {
   if (P.finished && (G.racers.every((r) => r.finished) || G.t - P.finishT > 20) && G.endT <= 0) showResults();
 }
 
-// A crash, made violent: debris in the car's paint, sparks, a dent, the sound, the shake; a big one rolls the car
+// A crash: debris in the car's paint, sparks, a dent, the sound, the shake, and a hard jolt on the body's springs
 // (pops it up and spins it over: the body lands back on its wheels) and plays in slow motion if it's yours.
 // wall: hit a wall (r alone) or another car (other: the one that hit it).
 function smash(r, x, y, z, nx, nz, v, wall, other = null) {
@@ -316,26 +329,23 @@ function smash(r, x, y, z, nx, nz, v, wall, other = null) {
   if (other) wreck.crash(x, y, z, -nx, -nz, v * 0.6, other.paint, 0.4);
   sfxAt(big ? 'bigCrash' : v > 7 ? 'metal' : 'thud', x, z, mine ? 1 : 0.8);
   for (const c of other ? [r, other] : [r]) { c.dmg = Math.min(100, (c.dmg || 0) + v * (c === r ? 1 : 0.5)); dent(c); }
-  if (mine) { G.shake = Math.max(G.shake || 0, Math.min(1.2, v / 14)); if (big) G.slowT = 0.22; }
-  if (big && !r.parked && r.key !== 'segway') { // over it goes
-    const B = r.body; B.vy = Math.max(B.vy, 5 + v * 0.18); B.grounded = false; B.plat = null; B.heading += (Math.random() - 0.5) * 0.8;
-    r.mesh.userData.tumble = { t: 0, dur: 0.75 + Math.random() * 0.3, axis: Math.random() < 0.7 ? 'z' : 'x', dir: Math.random() < 0.5 ? -1 : 1 };
-  }
+  if (mine) G.shake = Math.max(G.shake || 0, Math.min(0.8, v / 18));
+  // the jolt: the body rocks on its springs away from the hit (both cars), no cartoon roll-over
+  for (const [c, s] of other ? [[r, 1], [other, -0.7]] : [[r, -1]]) jolt(c, nx * s, nz * s, v);
+}
+function jolt(c, nx, nz, v) {
+  const u = c.mesh.userData, h = c.body.heading, lx = nx * Math.cos(h) - nz * Math.sin(h), lz = nx * Math.sin(h) + nz * Math.cos(h), k = Math.min(1.6, v * 0.09);
+  u.kick = { roll: -lx * k, pitch: lz * k, heave: k * 0.6 };
 }
 // Dents: the body crumples a little with every hit (shorter at the nose, a twist), up to a point.
 function dent(r) {
   const b = r.mesh.userData.body, k = Math.min(1, (r.dmg || 0) / 100); if (!b || r.key === 'segway') return;
   b.scale.set(1 - k * 0.04, 1 - k * 0.06, 1 - k * 0.09); r.mesh.userData.twist = (r.mesh.userData.twist || (Math.random() - 0.5) * 0.06) ;
 }
-// Per frame for each car: the roll-over, the lights, exhaust in the cold, smoke when it's hurt.
+// Per frame for each car: the lights, exhaust in the cold, smoke when it's hurt.
 function carVisuals(r, dt) {
   const u = r.mesh.userData, B = r.body, b = u.body;
-  if (u.tumble) {
-    const T0 = u.tumble; T0.t += dt; const k = Math.min(1, T0.t / T0.dur), e = k < 1 ? k * k * (3 - 2 * k) : 1;
-    b.rotation[T0.axis] += T0.dir * Math.PI * 2 * e; b.position.y = Math.sin(Math.PI * k) * 0.9;
-    if (k >= 1) { u.tumble = null; b.position.y = 0; }
-  }
-  if (u.twist && !u.tumble) b.rotation.y = u.twist * Math.min(1, (r.dmg || 0) / 60);
+  if (u.twist) b.rotation.y = u.twist * Math.min(1, (r.dmg || 0) / 60);
   const night = nightOn(); carLights(r.mesh, night, r === G.player ? (G.brakeK || 0) : (r.brakeK || 0));
   if (r === G.player) { // your own headlamps really light the road (a spot light; everyone else's are painted pools)
     const fx0 = Math.sin(B.heading), fz0 = Math.cos(B.heading), L0 = VEHICLES[r.key].len / 2;
@@ -383,11 +393,15 @@ function copControl(r, P) {
 }
 
 // ------------------------------------------------------------------ cameras: chase, bumper, the mirror, the menu map
-const camState = { pos: new THREE.Vector3(), init: false };
+const camState = { pos: new THREE.Vector3(), init: false, yaw: 0 };
 const tmp = new THREE.Vector3();
 function cameraFor(dt) {
   if (G.state === 'menu') return menuCamera(dt);
-  const r = G.player, B = r.body, S = VEHICLES[r.key], fx = Math.sin(B.heading), fz = Math.cos(B.heading);
+  const r = G.player, B = r.body, S = VEHICLES[r.key];
+  // the chase cam swings after the car, half way between where it points and where it's going (a drift doesn't whip it)
+  const want = B.heading + wrapAngle((B.speed < -0.5 ? B.heading : B.vh ?? B.heading) - B.heading) * 0.5;
+  camState.yaw = camState.init && G.camMode !== 'bumper' ? camState.yaw + wrapAngle(want - camState.yaw) * Math.min(1, dt * 5) : B.heading;
+  const fx = Math.sin(G.camMode === 'bumper' ? B.heading : camState.yaw), fz = Math.cos(G.camMode === 'bumper' ? B.heading : camState.yaw);
   if (G.camMode === 'bumper') { // on the nose, low, looking down the road
     const f = S.segway ? 0.2 : S.len / 2 + 0.05, up = S.segway ? 1.75 : 0.95;
     cam.position.set(B.x + fx * f, B.y + up, B.z + fz * f); cam.lookAt(B.x + fx * 30, B.y + up - 0.4, B.z + fz * 30); cam.fov = 68 + clamp(Math.abs(B.speed), 0, 25) * 0.4;
@@ -402,7 +416,7 @@ function cameraFor(dt) {
       if (platsNear(W, x, z).some((p) => !p.ghost && contains(p, x, z, 0.4) && p.bot < y && p.top > y - 0.3)) { const kk = k - 0.05; tmp.set(B.x - fx * back * kk, B.y + 1.2 + (up - 1.2) * kk, B.z - fz * back * kk); pulled = true; break; }
     }
     if (!camState.init) { camState.pos.copy(tmp); camState.init = true; }
-    const rate = pulled ? 30 : 6;
+    const rate = pulled ? 30 : 4.5; // (lags a heavy car a touch more)
     camState.pos.x = damp(camState.pos.x, tmp.x, rate, dt); camState.pos.z = damp(camState.pos.z, tmp.z, rate, dt); camState.pos.y = damp(camState.pos.y, tmp.y, 4, dt);
     cam.position.copy(camState.pos); cam.lookAt(B.x + fx * 4, B.y + 1.0, B.z + fz * 4); cam.fov = 60 + clamp(Math.abs(B.speed), 0, 25) * 0.4;
   }
@@ -596,7 +610,7 @@ function resize() { const w = innerWidth, h = innerHeight; R.resize(w, h); cam.a
 addEventListener('resize', resize);
 if (params.get('ps1') === '0') { PS1.jitter = 0; PS1.affine = 0; }
 G.car = VEHICLE_ORDER.includes(params.get('car')) ? params.get('car') : (VEHICLE_ORDER.includes(store.get('car')) ? store.get('car') : 'sedan');
-resize(); stage.applyLight(light);
+resize(); stage.applyLight(light); warmShaders();
 const qRoute = ROUTES.find((r) => r.key === params.get('circuit'));
 if (qRoute) G.route = qRoute;
 if (['race', 'tt', 'combat'].includes(params.get('mode'))) { G.mode = params.get('mode'); showMenu('title'); startRace(); } else showMenu('title');

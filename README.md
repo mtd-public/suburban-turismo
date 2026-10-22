@@ -45,8 +45,10 @@ the town (snowfields, slushy salted roads, iced ponds, bare trees and snowy pine
 breath from every tailpipe. Night turns on the street lamps, headlights (a spot that lights the road ahead), tail
 and brake lights.
 
-Crashes (`js/fx.js`, `js/race.js`): a hard hit knocks both cars about by weight, spins the one struck, throws off
-panels in its paint, trim, glass, sparks and the odd rolling hubcap, dents it, and a big one rolls it over. Sound
+Crashes (`js/fx.js`, `js/race.js`): a hard hit knocks both cars about by weight, spins the one struck, rocks both
+bodies hard on their springs, throws off panels in its paint, trim, glass, sparks and the odd rolling hubcap, and
+dents it. The cars sit on soft suspension (`poseVehicle`): they squat, dive, roll out of corners and sink on landing.
+The track layer under you turns green going the right way round and red going the wrong way. Sound
 (`js/audio.js` on the shared WebAudio synth `js/sfx-synth.js`): a four-gear engine with shifts, tyre squeal, road
 rumble, wind, rivals passing, sirens, crashes and every weapon. M mutes.
 

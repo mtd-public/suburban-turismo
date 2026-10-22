@@ -64,21 +64,26 @@ export function onTrack(x, z, pad = 2) {
   return false;
 }
 
-// The layer's paint: a see-through band, red-and-white kerbs at the edges, chevrons pointing the way.
+// The layer's paint: a see-through band with bold outlined chevrons pointing the way (tinted: the circuit's colour on
+// the map; green or red under you, by which way you're going), and red-and-white kerbs at the edges (never tinted).
 const bandTex = () => canvasTex(32, 64, (g, w, h) => {
   g.clearRect(0, 0, w, h);
-  g.fillStyle = 'rgba(255,255,255,0.42)'; g.fillRect(3, 0, w - 6, h);
-  for (let y = 0; y < h; y += 16) for (const x of [0, w - 3]) { g.fillStyle = '#ffffff'; g.fillRect(x, y, 3, 8); g.fillStyle = '#c82020'; g.fillRect(x, y + 8, 3, 8); }
-  g.fillStyle = 'rgba(255,255,255,0.85)';
-  for (let k = 0; k < 2; k++) { const y0 = 8 + k * 32; g.beginPath(); g.moveTo(8, y0 + 12); g.lineTo(16, y0); g.lineTo(24, y0 + 12); g.lineTo(24, y0 + 17); g.lineTo(16, y0 + 5); g.lineTo(8, y0 + 17); g.closePath(); g.fill(); }
+  g.fillStyle = 'rgba(255,255,255,0.5)'; g.fillRect(4, 0, w - 8, h);
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(4, 0, 1, h); g.fillRect(w - 5, 0, 1, h); // (bright lane edges)
+  const chev = (y0, grow) => { g.beginPath(); g.moveTo(6 - grow, y0 + 13 + grow); g.lineTo(16, y0 - grow); g.lineTo(26 + grow, y0 + 13 + grow); g.lineTo(26 + grow, y0 + 20 + grow); g.lineTo(16, y0 + 7); g.lineTo(6 - grow, y0 + 20 + grow); g.closePath(); g.fill(); };
+  for (let k = 0; k < 2; k++) { const y0 = 6 + k * 32; g.fillStyle = 'rgba(10,10,14,0.85)'; chev(y0, 1); g.fillStyle = '#ffffff'; chev(y0, 0); }
+}, { repeat: true });
+const kerbTex = () => canvasTex(32, 64, (g, w, h) => {
+  g.clearRect(0, 0, w, h);
+  for (let y = 0; y < h; y += 16) for (const x of [0, w - 4]) { g.fillStyle = '#ffffff'; g.fillRect(x, y, 4, 8); g.fillStyle = '#d01818'; g.fillRect(x, y + 8, 4, 8); }
 }, { repeat: true });
 const checkTex = () => canvasTex(16, 4, (g) => { for (let x = 0; x < 16; x++) for (let y = 0; y < 4; y++) { g.fillStyle = (x + y) % 2 ? '#111' : '#f4f4f4'; g.fillRect(x, y, 1, 1); } });
-let BAND = null, CHECK = null;
+let BAND = null, KERB = null, CHECK = null;
 
 // One circuit as a mesh group. `heightAt(x, z)` puts it on the ground (drive layer); without it the band floats
 // at y and draws over everything (the overhead map, so the line shows through shop roofs).
 export function buildRouteLayer(r, { heightAt = null, y = 0.6, opacity = 0.75 } = {}) {
-  BAND ??= bandTex(); CHECK ??= checkTex();
+  BAND ??= bandTex(); KERB ??= kerbTex(); CHECK ??= checkTex();
   const over = !heightAt, S = routeSamples(r, 2), n = S.length, hw = TRACK_W / 2;
   const pos = [], uv = [], idx = [];
   let v = 0;
@@ -91,8 +96,8 @@ export function buildRouteLayer(r, { heightAt = null, y = 0.6, opacity = 0.75 } 
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); g.setIndex(idx);
   const opts = { transparent: true, opacity, depthWrite: false, depthTest: !over, side: THREE.DoubleSide, fog: !over, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 };
   const grp = new THREE.Group(), band = new THREE.Mesh(g, basic(new THREE.Color(r.color).getHex(), BAND, opts));
-  grp.add(band);
-  // the start/finish line
+  grp.add(band, new THREE.Mesh(g, basic(0xffffff, KERB, { ...opts, opacity: Math.min(1, opacity + 0.25) })));
+  grp.userData.band = band;
   // the start/finish line (an open run has a start line part way in, past the grid, and a finish at the end)
   const lineAt = (s) => { const line = new THREE.Mesh(new THREE.PlaneGeometry(TRACK_W, 2), basic(0xffffff, CHECK, { ...opts, opacity: 0.95 })); line.rotation.set(-Math.PI / 2, Math.atan2(s.tx, s.tz), 0, 'YXZ'); line.position.set(s.x, (over ? y : heightAt(s.x, s.z) + 0.07) + 0.01, s.z); grp.add(line); };
   const s = S[r.open ? OPEN_START : 0]; lineAt(s); if (r.open) lineAt(S[n - 3]);
